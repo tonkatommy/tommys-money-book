@@ -1,0 +1,107 @@
+// Tommy's Money Book — Prisma schema
+// Data model from the implementation plan §5. Two sets of books (PERSONAL /
+// BUSINESS) live in one database; the `book` field on both Account and
+// Category is what lets us enforce "never mix personal and business" in code
+// rather than by discipline.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Which set of books a record belongs to. Every account and category is
+// exactly one or the other — the golden rule of this app.
+enum Book {
+  PERSONAL
+  BUSINESS
+}
+
+// What a category fundamentally is. TRANSFER and OWNER exist so that money
+// moving between our own accounts (or in/out of the business) is never
+// mistaken for income or expenses.
+enum Kind {
+  INCOME
+  EXPENSE
+  TRANSFER
+  OWNER
+}
+
+// The bridge between a freeform category list and the IR3. Categories can be
+// renamed/merged freely — as long as these tags are right, year-end tax
+// reports don't care what the categories are called.
+enum TaxTag {
+  RENTAL_INCOME
+  RENTAL_EXPENSE
+  BIZ_INCOME
+  BIZ_EXPENSE
+  HOME_OFFICE
+}
+
+// Where a transaction came from. AKAHU rows carry an externalId for dedupe;
+// MANUAL is for cash the bank never sees.
+enum Source {
+  AKAHU
+  MANUAL
+}
+
+model Account {
+  id      String  @id @default(cuid())
+  name    String  @unique // "ANZ Everyday", "BNZ Tommy Tinkers", ...
+  book    Book
+  akahuId String? @unique // linked when the Akahu feed lands in Phase 1
+
+  transactions Transaction[]
+}
+
+model Category {
+  id     String  @id @default(cuid())
+  name   String // final list is built bottom-up from real Akahu data in Phase 2
+  book   Book
+  kind   Kind
+  taxTag TaxTag?
+
+  // Akahu category names that auto-map to this category during sync.
+  // Postgres arrays are fine here — this is config data, not relational data.
+  akahuNames String[]
+
+  transactions Transaction[]
+
+  // Same category name can exist in both books ("Software" personal vs
+  // business), but not twice within one book.
+  @@unique([name, book])
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  accountId   String
+  payee       String?
+  description String
+  categoryId  String?
+
+  // Money is stored as integer cents — floats can't represent $0.10 exactly
+  // and sums drift. -$200.00 is stored as -20000; format at the display edge.
+  amountCents Int
+
+  notes  String?
+  source Source  @default(AKAHU)
+
+  // Akahu's stable transaction ID. The @unique means a re-run sync can never
+  // double-import a transaction — the DB itself refuses.
+  externalId String? @unique
+
+  // Links the two legs of a transfer (out ↔ in) as a first-class pair.
+  // Unpaired transfers surface as a warning; paired ones net to zero.
+  transferPairId String?
+
+  account  Account   @relation(fields: [accountId], references: [id])
+  category Category? @relation(fields: [categoryId], references: [id])
+
+  @@index([date])
+  @@index([accountId, date])
+  @@index([categoryId])
+}

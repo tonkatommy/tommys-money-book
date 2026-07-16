@@ -1,0 +1,55 @@
+# Tommy's Money Book — homelab deployment
+#
+# Two services for Phase 0: the Next.js app and Postgres. The sync worker
+# joins as a third service in Phase 1.
+#
+# Usage:
+#   cp .env.example .env   (then set a real POSTGRES_PASSWORD)
+#   docker compose up -d db          # dev: db only, app via `npm run dev`
+#   docker compose up -d --build     # full stack
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-moneybook}
+      # ${VAR:?message} makes compose refuse to start with an empty password
+      # rather than silently running an unprotected database.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-moneybook}
+    ports:
+      # Bound to localhost only — the app container reaches the db over the
+      # compose network; this mapping exists just so `npm run dev` and
+      # `prisma migrate` on the host can connect.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-moneybook} -d ${POSTGRES_DB:-moneybook}",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        # Waits for pg_isready, not just "container started" — avoids the app
+        # crash-looping while Postgres is still initialising.
+        condition: service_healthy
+    environment:
+      # Inside the compose network the db's hostname is its service name.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-moneybook}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-moneybook}
+    ports:
+      - "3000:3000"
+
+volumes:
+  # Named volume so the data survives `docker compose down`.
+  # Nightly pg_dump backup job gets added here in a later phase.
+  db-data:
