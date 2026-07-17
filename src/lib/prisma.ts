@@ -13,8 +13,13 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 // Prisma 7 talks to Postgres through a "driver adapter" — a thin wrapper
 // around the standard `pg` library — instead of the old bundled Rust engine.
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL is not set");
+}
+
 const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: databaseUrl,
 });
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
