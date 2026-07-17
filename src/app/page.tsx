@@ -41,10 +41,14 @@ async function getDbStatus(): Promise<DbStatus> {
       counts: { accounts, categories, transactions },
     };
   } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    const message = err instanceof Error ? err.message : String(err);
+
+    if (process.env.NODE_ENV === "production") {
+      console.error("Database status check failed", err);
+      return { ok: false, error: "Database unreachable. Check server logs." };
+    }
+
+    return { ok: false, error: message };
   }
 }
 
