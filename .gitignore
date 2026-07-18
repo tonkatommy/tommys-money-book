@@ -27,6 +27,7 @@ AGENTS.md
 .claude/**/*.log
 CLAUDE.local.md
 .claude/
+CLAUDE.md
 
 # Gemini CLI
 gemini-debug.log
@@ -302,3 +303,4 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+/CLAUDE.md
