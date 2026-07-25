@@ -16,9 +16,9 @@ import {
   type ImportCounts,
 } from "./import";
 import {
-  deriveOpeningBalanceCents,
   isDriftWorthWarningAbout,
   reconcileAccount,
+  resolveOpeningBalanceCents,
 } from "./reconcile";
 import { baselineWindow, incrementalWindow, lookbackDaysFromEnv } from "./window";
 
@@ -188,15 +188,17 @@ async function syncAccount(input: {
     storedTotalCents(prisma, account.id),
   ]);
 
-  // The opening balance is derived exactly once, on the first run that
-  // actually imports something. Re-deriving it later would define away any
-  // drift we're trying to detect — the check would always pass, which is worse
-  // than not having it.
-  const openingBalanceCents =
-    account.openingBalanceCents ??
-    (akahuBalanceCents !== null
-      ? deriveOpeningBalanceCents(akahuBalanceCents, storedTotal)
-      : null);
+  // Derived on the first run that actually holds transactions, and re-derived
+  // only if our history later reaches further back. See resolveOpeningBalanceCents
+  // for why both halves of that matter — deriving too eagerly bakes in
+  // permanent false drift, deriving too often makes the check meaningless.
+  const openingBalanceCents = resolveOpeningBalanceCents({
+    storedOpeningBalanceCents: account.openingBalanceCents,
+    akahuBalanceCents,
+    storedTotalCents: storedTotal,
+    earliestTransactionDate: historyStart,
+    previousHistoryStartDate: account.historyStartDate,
+  });
 
   const reconciliation = reconcileAccount({
     akahuBalanceCents,

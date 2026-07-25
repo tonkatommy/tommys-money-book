@@ -13,7 +13,7 @@
 
 import "dotenv/config";
 
-import { prisma } from "@/lib/prisma";
+import { disconnectPrisma } from "@/lib/prisma";
 
 /** Run a script body with .env loaded, Prisma cleaned up, and a real exit code. */
 export async function runScript(
@@ -30,6 +30,8 @@ export async function runScript(
     console.error(`[${name}] failed:`, err);
     process.exitCode = 1;
   } finally {
-    await prisma.$disconnect();
+    // Only closes a pool that was actually opened, and never throws — a script
+    // that talks to Akahu and not Postgres must still exit 0.
+    await disconnectPrisma();
   }
 }

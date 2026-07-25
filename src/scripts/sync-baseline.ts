@@ -52,6 +52,19 @@ void runScript("baseline", async () => {
     `Baseline ${summary.status}: ${summary.totals.inserted} imported, ` +
       `${summary.totals.duplicates} already held.`,
   );
+
+  // Exit non-zero on anything but a clean run, matching sync:daily. The status
+  // line above scrolls past in a wall of per-account history output, so a
+  // wrapper script — or a person chaining `sync:baseline && accounts:map` —
+  // would otherwise treat a half-imported baseline as a finished one.
+  if (summary.status !== "SUCCESS") {
+    throw new Error(
+      `Baseline finished ${summary.status} — ${summary.accountsFailed} account(s) ` +
+        `failed and have no history or opening balance. Fix the cause and ` +
+        `re-run; already-imported transactions will be skipped as duplicates.`,
+    );
+  }
+
   console.log(
     "Next: `npm run accounts:map` to assign each account to a set of books.",
   );

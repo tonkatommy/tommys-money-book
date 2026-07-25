@@ -70,3 +70,27 @@ export const prisma = new Proxy({} as PrismaClient, {
     return typeof value === "function" ? value.bind(real) : value;
   },
 });
+
+/**
+ * Close the connection pool, if one was ever opened.
+ *
+ * Not the same as `prisma.$disconnect()`. Touching the Proxy at all *creates*
+ * the client, so a plain disconnect in a `finally` block would construct a
+ * connection purely in order to close it — and would throw "DATABASE_URL is
+ * not set" in a script that never needed a database (`npm run akahu:probe`
+ * only talks to Akahu). Worse, throwing from a `finally` replaces whatever
+ * error the script body was already reporting.
+ *
+ * So: no client, nothing to do; and a teardown failure is logged rather than
+ * thrown, because failing to hang up is never the interesting error.
+ */
+export async function disconnectPrisma(): Promise<void> {
+  const existing = globalForPrisma.prisma ?? productionClient;
+  if (!existing) return;
+
+  try {
+    await existing.$disconnect();
+  } catch (err) {
+    console.error("[prisma] failed to close the connection pool:", err);
+  }
+}

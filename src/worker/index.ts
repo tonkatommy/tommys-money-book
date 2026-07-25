@@ -17,7 +17,7 @@ import "dotenv/config";
 
 import cron from "node-cron";
 
-import { prisma } from "@/lib/prisma";
+import { disconnectPrisma, prisma } from "@/lib/prisma";
 import { runSync } from "@/lib/sync/run";
 
 // 7am. Akahu's overnight refresh has landed by then, and it's before the
@@ -85,13 +85,16 @@ function main(): void {
     void sync();
   }
 
-  // Compose sends SIGTERM on `docker compose down`. Finishing the current run
-  // and closing the connection pool cleanly avoids leaving a SyncRun stuck in
-  // RUNNING, which the status page would show as a sync in progress forever.
+  // Compose sends SIGTERM on `docker compose down`. We close the connection
+  // pool and exit; note this does NOT wait for a sync that's already in
+  // flight, so shutting down mid-sync leaves that SyncRun at status RUNNING.
+  // The next run supersedes it and the status page's staleness check still
+  // fires, so it's untidy rather than dangerous — but don't read this as a
+  // graceful drain, because it isn't one.
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     process.on(signal, () => {
       console.log(`[worker] ${signal} received, shutting down`);
-      void prisma.$disconnect().finally(() => process.exit(0));
+      void disconnectPrisma().finally(() => process.exit(0));
     });
   }
 }

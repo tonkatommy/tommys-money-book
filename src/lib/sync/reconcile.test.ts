@@ -4,6 +4,7 @@ import {
   deriveOpeningBalanceCents,
   isDriftWorthWarningAbout,
   reconcileAccount,
+  resolveOpeningBalanceCents,
   sumCents,
 } from "./reconcile";
 
@@ -98,6 +99,149 @@ describe("reconcileAccount", () => {
     expect(
       reconcileAccount({ akahuBalanceCents, openingBalanceCents: opening, storedTotalCents })!
         .driftCents,
+    ).toBe(0);
+  });
+});
+
+describe("resolveOpeningBalanceCents", () => {
+  const ANZ_BALANCE = 482055; // $4,820.55
+  const ALL_TRANSACTIONS = 396248; // sum of the 20 we'd hold
+  const DAY_ZERO = new Date("2024-08-02T00:00:00.000Z");
+
+  it("REGRESSION: derives nothing when we hold no transactions yet", () => {
+    // The bug this function exists for. Akahu can report an account with a
+    // balance but no transactions — its docs note they take a few seconds to
+    // process after a new connection. Deriving then gave
+    // `opening = the entire balance`, and every transaction that arrived
+    // afterwards looked like drift, permanently, with no code path to reset
+    // it. Measured -$3,962.48 of phantom drift on a healthy account.
+    expect(
+      resolveOpeningBalanceCents({
+        storedOpeningBalanceCents: null,
+        akahuBalanceCents: ANZ_BALANCE,
+        storedTotalCents: 0,
+        earliestTransactionDate: null,
+        previousHistoryStartDate: null,
+      }),
+    ).toBeNull();
+  });
+
+  it("REGRESSION: derives correctly once the transactions do arrive", () => {
+    // The second half of the same scenario: having correctly held off, the
+    // next run must produce the right answer rather than the poisoned one.
+    expect(
+      resolveOpeningBalanceCents({
+        storedOpeningBalanceCents: null,
+        akahuBalanceCents: ANZ_BALANCE,
+        storedTotalCents: ALL_TRANSACTIONS,
+        earliestTransactionDate: DAY_ZERO,
+        previousHistoryStartDate: null,
+      }),
+    ).toBe(85807); // $858.07 of genuinely pre-history balance
+  });
+
+  it("keeps the stored value on an ordinary run", () => {
+    // Re-deriving every run would make drift cancel itself out and the
+    // reconciliation would always pass — worse than not having the check.
+    expect(
+      resolveOpeningBalanceCents({
+        storedOpeningBalanceCents: 85807,
+        akahuBalanceCents: ANZ_BALANCE,
+        storedTotalCents: ALL_TRANSACTIONS,
+        earliestTransactionDate: DAY_ZERO,
+        previousHistoryStartDate: DAY_ZERO,
+      }),
+    ).toBe(85807);
+  });
+
+  it("keeps the stored value even when drift is present", () => {
+    // The critical property: a missing recent transaction must stay visible
+    // as drift, not be silently absorbed into a new opening balance.
+    const withOneMissing = ALL_TRANSACTIONS - 8540;
+
+    expect(
+      resolveOpeningBalanceCents({
+        storedOpeningBalanceCents: 85807,
+        akahuBalanceCents: ANZ_BALANCE,
+        storedTotalCents: withOneMissing,
+        earliestTransactionDate: DAY_ZERO,
+        previousHistoryStartDate: DAY_ZERO,
+      }),
+    ).toBe(85807);
+  });
+
+  it("re-derives when history now reaches further back", () => {
+    // A first run that captured only part of the history measured from the
+    // wrong starting point. Once older transactions arrive, the old figure is
+    // definitionally stale and must be recomputed.
+    expect(
+      resolveOpeningBalanceCents({
+        storedOpeningBalanceCents: 300000, // derived from a partial history
+        akahuBalanceCents: ANZ_BALANCE,
+        storedTotalCents: ALL_TRANSACTIONS,
+        earliestTransactionDate: DAY_ZERO,
+        previousHistoryStartDate: new Date("2026-01-01T00:00:00.000Z"),
+      }),
+    ).toBe(85807);
+  });
+
+  it("does not re-derive when history start moves later", () => {
+    // Shouldn't happen, but if Akahu ever returns a shallower window we must
+    // not treat it as new information and recompute from less data.
+    expect(
+      resolveOpeningBalanceCents({
+        storedOpeningBalanceCents: 85807,
+        akahuBalanceCents: ANZ_BALANCE,
+        storedTotalCents: ALL_TRANSACTIONS,
+        earliestTransactionDate: new Date("2026-01-01T00:00:00.000Z"),
+        previousHistoryStartDate: DAY_ZERO,
+      }),
+    ).toBe(85807);
+  });
+
+  it("treats a stored opening balance of 0 as real, not missing", () => {
+    // A brand new account legitimately opens at zero. A falsy check here
+    // would re-derive it on every single run.
+    expect(
+      resolveOpeningBalanceCents({
+        storedOpeningBalanceCents: 0,
+        akahuBalanceCents: 10000,
+        storedTotalCents: 5000,
+        earliestTransactionDate: DAY_ZERO,
+        previousHistoryStartDate: DAY_ZERO,
+      }),
+    ).toBe(0);
+  });
+
+  it("holds off when Akahu reports no balance to measure against", () => {
+    expect(
+      resolveOpeningBalanceCents({
+        storedOpeningBalanceCents: null,
+        akahuBalanceCents: null,
+        storedTotalCents: ALL_TRANSACTIONS,
+        earliestTransactionDate: DAY_ZERO,
+        previousHistoryStartDate: null,
+      }),
+    ).toBeNull();
+  });
+
+  it("the derived value always reconciles to zero drift", () => {
+    // Baseline invariant, now routed through the resolver rather than the
+    // raw subtraction.
+    const opening = resolveOpeningBalanceCents({
+      storedOpeningBalanceCents: null,
+      akahuBalanceCents: ANZ_BALANCE,
+      storedTotalCents: ALL_TRANSACTIONS,
+      earliestTransactionDate: DAY_ZERO,
+      previousHistoryStartDate: null,
+    });
+
+    expect(
+      reconcileAccount({
+        akahuBalanceCents: ANZ_BALANCE,
+        openingBalanceCents: opening,
+        storedTotalCents: ALL_TRANSACTIONS,
+      })!.driftCents,
     ).toBe(0);
   });
 });
