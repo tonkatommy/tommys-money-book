@@ -36,7 +36,12 @@ services:
       retries: 10
 
   app:
-    build: .
+    build:
+      context: .
+      # Explicit, not implied. Without a target, Docker builds the *last*
+      # stage in the Dockerfile — so adding the worker stage below it would
+      # silently turn this service into a second worker.
+      target: runner
     restart: unless-stopped
     depends_on:
       db:
