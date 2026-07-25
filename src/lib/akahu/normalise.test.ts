@@ -145,7 +145,11 @@ describe("normaliseAccount", () => {
   });
 
   it("handles an account with no balance at all", () => {
-    const { balance: _balance, ...withoutBalance } = baseAccount;
+    // Akahu omits `balance` entirely for some connections rather than
+    // sending a null, so the field has to be genuinely absent here.
+    const withoutBalance: Account = { ...baseAccount };
+    delete withoutBalance.balance;
+
     const result = normaliseAccount(withoutBalance);
 
     expect(result.balanceCents).toBeNull();
