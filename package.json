@@ -10,7 +10,14 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sync:baseline": "tsx src/scripts/sync-baseline.ts",
+    "sync:daily": "tsx src/scripts/sync-daily.ts",
+    "akahu:probe": "tsx src/scripts/akahu-probe.ts",
+    "accounts:map": "tsx src/scripts/accounts-map.ts",
+    "worker": "tsx src/worker/index.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
