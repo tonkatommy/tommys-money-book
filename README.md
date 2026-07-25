@@ -51,6 +51,8 @@ Design decisions worth noting:
 
 ## Roadmap
 
+Full architecture, data model, and phase detail: [docs/implementation-plan.md](docs/implementation-plan.md).
+
 - [ ] **Phase 0 — Scaffolding:** Next.js + Prisma + Postgres in Docker Compose, "hello database" on the homelab
 - [ ] **Phase 1 — Bank feeds:** Akahu connection, full-history baseline pull, daily sync worker, balance reconciliation
 - [ ] **Phase 2 — Categories:** build the category list bottom-up from real Akahu data, auto-categorisation rules, transfer pair detection
