@@ -36,3 +36,28 @@ COPY --from=build --chown=node:node /app/public ./public
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 CMD ["node", "server.js"]
+
+# ---- Stage 4: sync worker ---------------------------------------------------
+# A separate image from the same source tree. The worker shares the Prisma
+# client and the Akahu gateway with the app but has no HTTP server, no Next.js,
+# and no exposed port — it only talks to Postgres and Akahu.
+#
+# It runs the TypeScript directly through `tsx` rather than compiling to JS
+# first. That keeps the generated Prisma client and the `@/*` path aliases
+# working exactly as they do in development, with nothing to fall out of sync.
+# The cost is shipping full node_modules (tsx is a devDependency), which on a
+# homelab is a few tens of megabytes nobody will ever notice.
+FROM node:24-alpine AS worker
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Full dependency tree, unlike the app's standalone runtime — tsx needs to be
+# present at run time here, not just at build time.
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+# src carries the generated Prisma client, produced by `prisma generate`
+# during the build stage.
+COPY --from=build --chown=node:node /app/src ./src
+COPY --from=build --chown=node:node /app/package.json /app/tsconfig.json ./
+
+USER node
+CMD ["npx", "tsx", "src/worker/index.ts"]

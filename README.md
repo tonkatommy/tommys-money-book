@@ -46,26 +46,77 @@ Design decisions worth noting:
 
 - **Money is integer cents.** Floats can't represent $0.10 exactly; sums drift. `-$200.00` is stored as `-20000` and formatted at the edge.
 - **Akahu is the sole ingestion path.** On first connection the app pulls all available history as its baseline; the old spreadsheet is frozen as an archive, not migrated.
-- **`externalId` dedupe** means a re-run sync can never double-import a transaction.
+- **`externalId` dedupe** means a re-run sync can never double-import a transaction. It's enforced by a unique constraint, so the database refuses duplicates regardless of what the application believes.
+- **Reconciliation needs an opening balance.** Akahu only reaches back about two years, so "sum of stored transactions equals the bank balance" can never hold on its own. The balance that predates our earliest transaction is derived once at baseline; drift is measured against that from then on.
+- **The incremental sync window looks backwards.** Each run re-reads the last seven days rather than starting where the previous run finished — banks post transactions late, and anchoring on run time would skip them permanently. Dedupe makes the overlap free.
 - **NZ financial year (01/04–31/03) is derived from the transaction date**, not stored — one SQL expression used by every report.
 
 ## Roadmap
 
-- [ ] **Phase 0 — Scaffolding:** Next.js + Prisma + Postgres in Docker Compose, "hello database" on the homelab
-- [ ] **Phase 1 — Bank feeds:** Akahu connection, full-history baseline pull, daily sync worker, balance reconciliation
+Full architecture, data model, and phase detail: [docs/implementation-plan.md](docs/implementation-plan.md).
+
+- [x] **Phase 0 — Scaffolding:** Next.js + Prisma + Postgres in Docker Compose, "hello database" on the homelab
+- [x] **Phase 1 — Bank feeds:** Akahu connection, full-history baseline pull, daily sync worker, balance reconciliation
 - [ ] **Phase 2 — Categories:** build the category list bottom-up from real Akahu data, auto-categorisation rules, transfer pair detection
 - [ ] **Phase 3 — MVP:** transaction list with filtering/search/edit, dashboard (income/expenses per book, category breakdown, balances, GST threshold) — go-live point
 - [ ] **Phase 4 — Reports:** IR3 year-end pack, home office calculation, budget vs actual
 
 ## Getting started
 
-> Not yet runnable — Phase 0 in progress. This section will grow as the scaffolding lands.
+No Akahu tokens are needed to run this. The app ships with fixture data — two
+years of fake transactions across a fake ANZ and BNZ account — and defaults to
+using it, so the whole sync pipeline works out of the box.
 
 ```bash
 git clone https://github.com/tonkatommy/tommys-money-book.git
 cd tommys-money-book
-docker compose up
+cp .env.example .env    # set a real POSTGRES_PASSWORD
+npm install
+docker compose up -d db
+npm run db:migrate
 ```
+
+Then pull the baseline and assign each account to a set of books:
+
+```bash
+npm run sync:baseline
+```
+
+```bash
+npm run accounts:map -- "BNZ Tommy Tinkers" BUSINESS
+```
+
+`npm run dev` serves the sync status page at http://localhost:3000.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `npm run akahu:probe` | Read-only: which accounts Akahu sees, and how far back each bank's history reaches. Writes nothing. |
+| `npm run sync:baseline` | One-off full-history pull. Safe to re-run — dedupe means a second run imports nothing. |
+| `npm run sync:daily` | One incremental sync. Same code path the worker runs. |
+| `npm run accounts:map` | List accounts, or assign one to PERSONAL / BUSINESS. |
+| `npm test` | Unit tests for the money, normalisation, window, and reconciliation logic. |
+
+### Going live with real Akahu data
+
+1. Create a profile at [my.akahu.nz](https://my.akahu.nz), connect the bank
+   logins, complete ID verification and 2FA, then create a personal app.
+2. Put the two tokens in `.env` (gitignored) and set `AKAHU_MODE=live`.
+3. Run `npm run akahu:probe` first — it's read-only, so it confirms the tokens
+   work and shows what a baseline would import before anything is written.
+4. `npm run sync:baseline`, then `docker compose up -d --build` to start the
+   daily worker.
+
+### Full stack
+
+```bash
+docker compose up -d --build
+```
+
+Three services: the Next.js app on :3000, Postgres, and the sync worker
+(no exposed port — it only talks to Postgres and Akahu). Migrations are never
+run automatically; apply them with `npm run db:migrate`.
 
 ## Security
 
@@ -75,4 +126,12 @@ docker compose up
 
 ## Status
 
-Early days — repo scaffolding stage. Built in the open as a learning and portfolio project.
+Phase 1 complete: the database fills itself. Accounts and transactions sync
+from Akahu, dedupe on Akahu's transaction ID, reconcile against the reported
+balance, and log every run. Everything runs against fixtures until real tokens
+are added.
+
+Next up is Phase 2 — building the category list bottom-up from the real Akahu
+data, now that there's data to build it from.
+
+Built in the open as a learning and portfolio project.

@@ -1,0 +1,782 @@
+{
+  "_comment": [
+    "Fake Akahu payloads used by the fixture gateway (AKAHU_MODE=fixture).",
+    "Shapes match the real /accounts and /accounts/{id}/transactions responses",
+    "so the fixture gateway and the live gateway share the same normalise code.",
+    "",
+    "Deliberately included, because each one has broken a real importer before:",
+    "  - amounts that round badly as floats (-5.5, 12.35, -0.07, -1234.56)",
+    "  - unenriched rows with no merchant or category at all",
+    "  - a same-day transfer pair across the two accounts (Phase 2 fodder)",
+    "  - transactions either side of 31 March, the NZ financial year boundary",
+    "  - ~2 years of history, matching what the regulated banks actually hold",
+    "",
+    "No real account numbers or ids. Nothing here is sensitive."
+  ],
+
+  "accounts": [
+    {
+      "_id": "acc_fixture_anz_everyday01",
+      "_authorisation": "auth_fixture_anz000000001",
+      "_credentials": "deprecated",
+      "connection": {
+        "_id": "conn_fixture_anz000000001",
+        "name": "ANZ",
+        "logo": "https://static.akahu.io/logos/anz.svg"
+      },
+      "name": "Everyday",
+      "status": "ACTIVE",
+      "formatted_account": "01-0001-0000001-00",
+      "type": "CHECKING",
+      "attributes": ["TRANSACTIONS", "PAYMENT_TO", "PAYMENT_FROM"],
+      "balance": {
+        "currency": "NZD",
+        "current": 4820.55,
+        "available": 4820.55,
+        "overdrawn": false
+      },
+      "refreshed": {
+        "balance": "2026-07-25T06:00:00.000Z",
+        "transactions": "2026-07-25T06:00:00.000Z"
+      }
+    },
+    {
+      "_id": "acc_fixture_bnz_tinkers01",
+      "_authorisation": "auth_fixture_bnz000000001",
+      "_credentials": "deprecated",
+      "connection": {
+        "_id": "conn_fixture_bnz000000001",
+        "name": "BNZ",
+        "logo": "https://static.akahu.io/logos/bnz.svg"
+      },
+      "name": "Tommy Tinkers",
+      "status": "ACTIVE",
+      "formatted_account": "02-0002-0000002-00",
+      "type": "CHECKING",
+      "attributes": ["TRANSACTIONS", "PAYMENT_TO", "PAYMENT_FROM"],
+      "balance": {
+        "currency": "NZD",
+        "current": 12750.4,
+        "available": 12750.4,
+        "overdrawn": false
+      },
+      "refreshed": {
+        "balance": "2026-07-25T06:00:00.000Z",
+        "transactions": "2026-07-25T06:00:00.000Z"
+      }
+    },
+    {
+      "_id": "acc_fixture_anz_rewards01",
+      "_authorisation": "auth_fixture_anz000000001",
+      "_credentials": "deprecated",
+      "connection": {
+        "_id": "conn_fixture_anz000000001",
+        "name": "ANZ",
+        "logo": "https://static.akahu.io/logos/anz.svg"
+      },
+      "name": "True Rewards",
+      "status": "ACTIVE",
+      "type": "REWARDS",
+      "attributes": [],
+      "balance": { "currency": "NZD", "current": 38.2 },
+      "refreshed": { "balance": "2026-07-25T06:00:00.000Z" }
+    }
+  ],
+
+  "transactions": [
+    {
+      "_id": "trans_fixture_0000000000001",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2024-08-02T20:00:00.000Z",
+      "updated_at": "2024-08-02T20:00:00.000Z",
+      "date": "2024-08-02T00:00:00.000Z",
+      "hash": "fixture-0001",
+      "description": "SALARY PAYMENT NORTHLAND ENG",
+      "amount": 3200.0,
+      "balance": 3412.1,
+      "type": "DIRECT CREDIT",
+      "category": {
+        "_id": "nzfcc_fixture_income00001",
+        "name": "Wages and salaries",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_1", "name": "Income" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000002",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2024-08-05T20:00:00.000Z",
+      "updated_at": "2024-08-05T20:00:00.000Z",
+      "date": "2024-08-05T00:00:00.000Z",
+      "hash": "fixture-0002",
+      "description": "COUNTDOWN WHANGAREI",
+      "amount": -85.4,
+      "balance": 3326.7,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_cd01", "name": "Countdown" },
+      "category": {
+        "_id": "nzfcc_fixture_groceries1",
+        "name": "Groceries",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000003",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2024-09-03T20:00:00.000Z",
+      "updated_at": "2024-09-03T20:00:00.000Z",
+      "date": "2024-09-03T00:00:00.000Z",
+      "hash": "fixture-0003",
+      "description": "RENT PAYMENT 14 KAURI ST",
+      "amount": -1850.0,
+      "balance": 1476.7,
+      "type": "DIRECT DEBIT"
+    },
+    {
+      "_id": "trans_fixture_0000000000004",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2024-10-11T20:00:00.000Z",
+      "updated_at": "2024-10-11T20:00:00.000Z",
+      "date": "2024-10-11T00:00:00.000Z",
+      "hash": "fixture-0004",
+      "description": "COFFEE SUPREME",
+      "amount": -5.5,
+      "balance": 1471.2,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_cs01", "name": "Coffee Supreme" },
+      "category": {
+        "_id": "nzfcc_fixture_cafes0001",
+        "name": "Cafes and restaurants",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_3", "name": "Lifestyle" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000005",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2024-12-20T20:00:00.000Z",
+      "updated_at": "2024-12-20T20:00:00.000Z",
+      "date": "2024-12-20T00:00:00.000Z",
+      "hash": "fixture-0005",
+      "description": "MITRE 10 MEGA",
+      "amount": -240.99,
+      "balance": 1230.21,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_m1001", "name": "Mitre 10" },
+      "category": {
+        "_id": "nzfcc_fixture_hardware1",
+        "name": "Hardware and garden",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000006",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2025-02-14T20:00:00.000Z",
+      "updated_at": "2025-02-14T20:00:00.000Z",
+      "date": "2025-02-14T00:00:00.000Z",
+      "hash": "fixture-0006",
+      "description": "Z ENERGY KAMO",
+      "amount": -62.3,
+      "balance": 1167.91,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_z001", "name": "Z Energy" },
+      "category": {
+        "_id": "nzfcc_fixture_fuel00001",
+        "name": "Fuel",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_4", "name": "Transport" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000007",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2025-03-31T20:00:00.000Z",
+      "updated_at": "2025-03-31T20:00:00.000Z",
+      "date": "2025-03-31T00:00:00.000Z",
+      "hash": "fixture-0007",
+      "description": "CREDIT INTEREST PAID",
+      "amount": 12.35,
+      "balance": 1180.26,
+      "type": "INTEREST"
+    },
+    {
+      "_id": "trans_fixture_0000000000008",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2025-04-01T20:00:00.000Z",
+      "updated_at": "2025-04-01T20:00:00.000Z",
+      "date": "2025-04-01T00:00:00.000Z",
+      "hash": "fixture-0008",
+      "description": "POWERSHOP NZ",
+      "amount": -110.0,
+      "balance": 1070.26,
+      "type": "DIRECT DEBIT",
+      "merchant": { "_id": "merchant_fixture_ps01", "name": "Powershop" },
+      "category": {
+        "_id": "nzfcc_fixture_power0001",
+        "name": "Power",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000009",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2025-06-18T20:00:00.000Z",
+      "updated_at": "2025-06-18T20:00:00.000Z",
+      "date": "2025-06-18T00:00:00.000Z",
+      "hash": "fixture-0009",
+      "description": "NETFLIX.COM",
+      "amount": -35.0,
+      "balance": 1035.26,
+      "type": "DIRECT DEBIT",
+      "merchant": { "_id": "merchant_fixture_nf01", "name": "Netflix" },
+      "category": {
+        "_id": "nzfcc_fixture_subs00001",
+        "name": "Subscriptions",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_3", "name": "Lifestyle" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000010",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2025-08-04T20:00:00.000Z",
+      "updated_at": "2025-08-04T20:00:00.000Z",
+      "date": "2025-08-04T00:00:00.000Z",
+      "hash": "fixture-0010",
+      "description": "SALARY PAYMENT NORTHLAND ENG",
+      "amount": 3200.0,
+      "balance": 4235.26,
+      "type": "DIRECT CREDIT",
+      "category": {
+        "_id": "nzfcc_fixture_income00001",
+        "name": "Wages and salaries",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_1", "name": "Income" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000011",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2025-09-09T20:00:00.000Z",
+      "updated_at": "2025-09-09T20:00:00.000Z",
+      "date": "2025-09-09T00:00:00.000Z",
+      "hash": "fixture-0011",
+      "description": "AA INSURANCE PREMIUM",
+      "amount": -1234.56,
+      "balance": 3000.7,
+      "type": "DIRECT DEBIT",
+      "merchant": { "_id": "merchant_fixture_aa01", "name": "AA Insurance" },
+      "category": {
+        "_id": "nzfcc_fixture_ins000001",
+        "name": "Insurance",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000012",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2025-11-22T20:00:00.000Z",
+      "updated_at": "2025-11-22T20:00:00.000Z",
+      "date": "2025-11-22T00:00:00.000Z",
+      "hash": "fixture-0012",
+      "description": "OFFSHORE SERVICE FEE",
+      "amount": -0.07,
+      "balance": 3000.63,
+      "type": "FEE"
+    },
+    {
+      "_id": "trans_fixture_0000000000013",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2026-01-15T20:00:00.000Z",
+      "updated_at": "2026-01-15T20:00:00.000Z",
+      "date": "2026-01-15T00:00:00.000Z",
+      "hash": "fixture-0013",
+      "description": "AIR NEW ZEALAND",
+      "amount": -420.0,
+      "balance": 2580.63,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_air1", "name": "Air New Zealand" },
+      "category": {
+        "_id": "nzfcc_fixture_travel001",
+        "name": "Travel",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_3", "name": "Lifestyle" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000014",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2026-03-30T20:00:00.000Z",
+      "updated_at": "2026-03-30T20:00:00.000Z",
+      "date": "2026-03-30T00:00:00.000Z",
+      "hash": "fixture-0014",
+      "description": "NEW WORLD REGENT",
+      "amount": -95.2,
+      "balance": 2485.43,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_nw01", "name": "New World" },
+      "category": {
+        "_id": "nzfcc_fixture_groceries1",
+        "name": "Groceries",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000015",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2026-04-15T20:00:00.000Z",
+      "updated_at": "2026-04-15T20:00:00.000Z",
+      "date": "2026-04-15T00:00:00.000Z",
+      "hash": "fixture-0015",
+      "description": "TRANSFER TO TOMMY TINKERS",
+      "amount": -1500.0,
+      "balance": 985.43,
+      "type": "TRANSFER"
+    },
+    {
+      "_id": "trans_fixture_0000000000016",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2026-05-02T20:00:00.000Z",
+      "updated_at": "2026-05-02T20:00:00.000Z",
+      "date": "2026-05-02T00:00:00.000Z",
+      "hash": "fixture-0016",
+      "description": "SALARY PAYMENT NORTHLAND ENG",
+      "amount": 3400.0,
+      "balance": 4385.43,
+      "type": "DIRECT CREDIT",
+      "category": {
+        "_id": "nzfcc_fixture_income00001",
+        "name": "Wages and salaries",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_1", "name": "Income" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000017",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2026-06-11T20:00:00.000Z",
+      "updated_at": "2026-06-11T20:00:00.000Z",
+      "date": "2026-06-11T00:00:00.000Z",
+      "hash": "fixture-0017",
+      "description": "UBER EATS",
+      "amount": -18.9,
+      "balance": 4366.53,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_ue01", "name": "Uber Eats" },
+      "category": {
+        "_id": "nzfcc_fixture_takeaway1",
+        "name": "Takeaway",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_3", "name": "Lifestyle" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000018",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2026-07-01T20:00:00.000Z",
+      "updated_at": "2026-07-01T20:00:00.000Z",
+      "date": "2026-07-01T00:00:00.000Z",
+      "hash": "fixture-0018",
+      "description": "POWERSHOP NZ",
+      "amount": -110.0,
+      "balance": 4256.53,
+      "type": "DIRECT DEBIT",
+      "merchant": { "_id": "merchant_fixture_ps01", "name": "Powershop" },
+      "category": {
+        "_id": "nzfcc_fixture_power0001",
+        "name": "Power",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000019",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2026-07-18T20:00:00.000Z",
+      "updated_at": "2026-07-18T20:00:00.000Z",
+      "date": "2026-07-18T00:00:00.000Z",
+      "hash": "fixture-0019",
+      "description": "COUNTDOWN WHANGAREI",
+      "amount": -76.45,
+      "balance": 4180.08,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_cd01", "name": "Countdown" },
+      "category": {
+        "_id": "nzfcc_fixture_groceries1",
+        "name": "Groceries",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000020",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_anz_everyday01",
+      "_connection": "conn_fixture_anz000000001",
+      "created_at": "2026-07-20T20:00:00.000Z",
+      "updated_at": "2026-07-20T20:00:00.000Z",
+      "date": "2026-07-20T00:00:00.000Z",
+      "hash": "fixture-0020",
+      "description": "COFFEE SUPREME",
+      "amount": -5.5,
+      "balance": 4174.58,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_cs01", "name": "Coffee Supreme" },
+      "category": {
+        "_id": "nzfcc_fixture_cafes0001",
+        "name": "Cafes and restaurants",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_3", "name": "Lifestyle" }
+        }
+      }
+    },
+
+    {
+      "_id": "trans_fixture_0000000000021",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2024-08-15T20:00:00.000Z",
+      "updated_at": "2024-08-15T20:00:00.000Z",
+      "date": "2024-08-15T00:00:00.000Z",
+      "hash": "fixture-0021",
+      "description": "INV 1042 J WILSON",
+      "amount": 850.0,
+      "balance": 850.0,
+      "type": "DIRECT CREDIT"
+    },
+    {
+      "_id": "trans_fixture_0000000000022",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2024-09-27T20:00:00.000Z",
+      "updated_at": "2024-09-27T20:00:00.000Z",
+      "date": "2024-09-27T00:00:00.000Z",
+      "hash": "fixture-0022",
+      "description": "BUNNINGS WHANGAREI",
+      "amount": -129.0,
+      "balance": 721.0,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_bun1", "name": "Bunnings" },
+      "category": {
+        "_id": "nzfcc_fixture_hardware1",
+        "name": "Hardware and garden",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000023",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2024-11-08T20:00:00.000Z",
+      "updated_at": "2024-11-08T20:00:00.000Z",
+      "date": "2024-11-08T00:00:00.000Z",
+      "hash": "fixture-0023",
+      "description": "INV 1051 HARBOUR MARINE",
+      "amount": 2400.0,
+      "balance": 3121.0,
+      "type": "DIRECT CREDIT"
+    },
+    {
+      "_id": "trans_fixture_0000000000024",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2025-01-20T20:00:00.000Z",
+      "updated_at": "2025-01-20T20:00:00.000Z",
+      "date": "2025-01-20T00:00:00.000Z",
+      "hash": "fixture-0024",
+      "description": "XERO NZ LTD",
+      "amount": -49.99,
+      "balance": 3071.01,
+      "type": "DIRECT DEBIT",
+      "merchant": { "_id": "merchant_fixture_xr01", "name": "Xero" },
+      "category": {
+        "_id": "nzfcc_fixture_software1",
+        "name": "Software",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_5", "name": "Technology" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000025",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2025-03-12T20:00:00.000Z",
+      "updated_at": "2025-03-12T20:00:00.000Z",
+      "date": "2025-03-12T00:00:00.000Z",
+      "hash": "fixture-0025",
+      "description": "INV 1063 K PATEL",
+      "amount": 1750.0,
+      "balance": 4821.01,
+      "type": "DIRECT CREDIT"
+    },
+    {
+      "_id": "trans_fixture_0000000000026",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2025-04-08T20:00:00.000Z",
+      "updated_at": "2025-04-08T20:00:00.000Z",
+      "date": "2025-04-08T00:00:00.000Z",
+      "hash": "fixture-0026",
+      "description": "PLACEMAKERS WHANGAREI",
+      "amount": -320.75,
+      "balance": 4500.26,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_pm01", "name": "PlaceMakers" },
+      "category": {
+        "_id": "nzfcc_fixture_hardware1",
+        "name": "Hardware and garden",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000027",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2025-07-02T20:00:00.000Z",
+      "updated_at": "2025-07-02T20:00:00.000Z",
+      "date": "2025-07-02T00:00:00.000Z",
+      "hash": "fixture-0027",
+      "description": "XERO NZ LTD",
+      "amount": -49.99,
+      "balance": 4450.27,
+      "type": "DIRECT DEBIT",
+      "merchant": { "_id": "merchant_fixture_xr01", "name": "Xero" },
+      "category": {
+        "_id": "nzfcc_fixture_software1",
+        "name": "Software",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_5", "name": "Technology" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000028",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2025-10-14T20:00:00.000Z",
+      "updated_at": "2025-10-14T20:00:00.000Z",
+      "date": "2025-10-14T00:00:00.000Z",
+      "hash": "fixture-0028",
+      "description": "INV 1078 NORTHPORT",
+      "amount": 3100.0,
+      "balance": 7550.27,
+      "type": "DIRECT CREDIT"
+    },
+    {
+      "_id": "trans_fixture_0000000000029",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2026-02-03T20:00:00.000Z",
+      "updated_at": "2026-02-03T20:00:00.000Z",
+      "date": "2026-02-03T00:00:00.000Z",
+      "hash": "fixture-0029",
+      "description": "REPCO WHANGAREI",
+      "amount": -215.6,
+      "balance": 7334.67,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_rp01", "name": "Repco" },
+      "category": {
+        "_id": "nzfcc_fixture_vehicle01",
+        "name": "Vehicle maintenance",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_4", "name": "Transport" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000030",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2026-04-15T20:00:00.000Z",
+      "updated_at": "2026-04-15T20:00:00.000Z",
+      "date": "2026-04-15T00:00:00.000Z",
+      "hash": "fixture-0030",
+      "description": "TRANSFER FROM ANZ EVERYDAY",
+      "amount": 1500.0,
+      "balance": 8834.67,
+      "type": "TRANSFER"
+    },
+    {
+      "_id": "trans_fixture_0000000000031",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2026-05-19T20:00:00.000Z",
+      "updated_at": "2026-05-19T20:00:00.000Z",
+      "date": "2026-05-19T00:00:00.000Z",
+      "hash": "fixture-0031",
+      "description": "INV 1090 J WILSON",
+      "amount": 2650.0,
+      "balance": 11484.67,
+      "type": "DIRECT CREDIT"
+    },
+    {
+      "_id": "trans_fixture_0000000000032",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2026-06-05T20:00:00.000Z",
+      "updated_at": "2026-06-05T20:00:00.000Z",
+      "date": "2026-06-05T00:00:00.000Z",
+      "hash": "fixture-0032",
+      "description": "XERO NZ LTD",
+      "amount": -49.99,
+      "balance": 11434.68,
+      "type": "DIRECT DEBIT",
+      "merchant": { "_id": "merchant_fixture_xr01", "name": "Xero" },
+      "category": {
+        "_id": "nzfcc_fixture_software1",
+        "name": "Software",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_5", "name": "Technology" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000033",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2026-06-28T20:00:00.000Z",
+      "updated_at": "2026-06-28T20:00:00.000Z",
+      "date": "2026-06-28T00:00:00.000Z",
+      "hash": "fixture-0033",
+      "description": "OWNER DRAWINGS",
+      "amount": -880.0,
+      "balance": 10554.68,
+      "type": "TRANSFER"
+    },
+    {
+      "_id": "trans_fixture_0000000000034",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2026-07-10T20:00:00.000Z",
+      "updated_at": "2026-07-10T20:00:00.000Z",
+      "date": "2026-07-10T00:00:00.000Z",
+      "hash": "fixture-0034",
+      "description": "INV 1097 HARBOUR MARINE",
+      "amount": 1980.0,
+      "balance": 12534.68,
+      "type": "DIRECT CREDIT"
+    },
+    {
+      "_id": "trans_fixture_0000000000035",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2026-07-15T20:00:00.000Z",
+      "updated_at": "2026-07-15T20:00:00.000Z",
+      "date": "2026-07-15T00:00:00.000Z",
+      "hash": "fixture-0035",
+      "description": "MOBIL KAMO",
+      "amount": -142.3,
+      "balance": 12392.38,
+      "type": "EFTPOS",
+      "merchant": { "_id": "merchant_fixture_mb01", "name": "Mobil" },
+      "category": {
+        "_id": "nzfcc_fixture_fuel00001",
+        "name": "Fuel",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_4", "name": "Transport" }
+        }
+      }
+    },
+    {
+      "_id": "trans_fixture_0000000000036",
+      "_user": "user_fixture00000000000001",
+      "_account": "acc_fixture_bnz_tinkers01",
+      "_connection": "conn_fixture_bnz000000001",
+      "created_at": "2026-07-22T20:00:00.000Z",
+      "updated_at": "2026-07-22T20:00:00.000Z",
+      "date": "2026-07-22T00:00:00.000Z",
+      "hash": "fixture-0036",
+      "description": "XERO NZ LTD",
+      "amount": -49.99,
+      "balance": 12342.39,
+      "type": "DIRECT DEBIT",
+      "merchant": { "_id": "merchant_fixture_xr01", "name": "Xero" },
+      "category": {
+        "_id": "nzfcc_fixture_software1",
+        "name": "Software",
+        "groups": {
+          "personal_finance": { "_id": "group_fixture_5", "name": "Technology" }
+        }
+      }
+    }
+  ]
+}

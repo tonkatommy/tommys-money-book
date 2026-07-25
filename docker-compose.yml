@@ -36,7 +36,12 @@ services:
       retries: 10
 
   app:
-    build: .
+    build:
+      context: .
+      # Explicit, not implied. Without a target, Docker builds the *last*
+      # stage in the Dockerfile — so adding the worker stage below it would
+      # silently turn this service into a second worker.
+      target: runner
     restart: unless-stopped
     depends_on:
       db:
@@ -48,6 +53,31 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-moneybook}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-moneybook}
     ports:
       - "3000:3000"
+
+  worker:
+    build:
+      context: .
+      # Same Dockerfile, different final stage — see Dockerfile stage 4.
+      target: worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-moneybook}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-moneybook}
+      # Defaults to fixture mode. Set AKAHU_MODE=live in .env once the personal
+      # app exists at my.akahu.nz — a missing token then fails fast rather than
+      # syncing nothing every morning.
+      AKAHU_MODE: ${AKAHU_MODE:-fixture}
+      AKAHU_APP_TOKEN: ${AKAHU_APP_TOKEN:-}
+      AKAHU_USER_TOKEN: ${AKAHU_USER_TOKEN:-}
+      SYNC_CRON: ${SYNC_CRON:-0 7 * * *}
+      SYNC_LOOKBACK_DAYS: ${SYNC_LOOKBACK_DAYS:-7}
+      SYNC_ON_START: ${SYNC_ON_START:-false}
+      # node-cron pins the schedule to Pacific/Auckland itself, but setting TZ
+      # too means log timestamps read in NZ time rather than UTC.
+      TZ: Pacific/Auckland
+    # No ports. The worker reaches out to Postgres and Akahu; nothing reaches in.
 
 volumes:
   # Named volume so the data survives `docker compose down`.

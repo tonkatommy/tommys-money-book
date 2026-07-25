@@ -48,13 +48,75 @@ enum Source {
   MANUAL
 }
 
+// Akahu's view of whether it can still talk to the bank. INACTIVE means the
+// connection needs re-consent — data goes stale silently unless we shout
+// about it, which is exactly the "sync stopped and nobody noticed" failure.
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// What kicked off a sync run. BASELINE is the one-off full-history pull;
+// SCHEDULED is the cron worker; MANUAL is a human running the CLI.
+enum SyncTrigger {
+  BASELINE
+  SCHEDULED
+  MANUAL
+}
+
+// PARTIAL exists because one dead bank connection shouldn't make the whole
+// run look like a failure — the other accounts synced fine.
+enum SyncStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
 model Account {
-  id      String  @id @default(cuid())
-  name    String  @unique // "ANZ Everyday", "BNZ Tommy Tinkers", ...
-  book    Book
-  akahuId String? @unique // linked when the Akahu feed lands in Phase 1
+  id   String  @id @default(cuid())
+  name String  @unique // "ANZ Everyday", "BNZ Tommy Tinkers", ...
+
+  // Nullable on purpose. A freshly discovered Akahu account genuinely doesn't
+  // know which set of books it belongs to yet — pretending it's PERSONAL by
+  // default would quietly put business spending in the wrong book. null means
+  // "needs mapping", the status page says so, and `npm run accounts:map` fixes
+  // it. Phase 3 can put a UI over the same field.
+  book Book?
+
+  akahuId String? @unique // Akahu's stable account id, e.g. acc_1111...
+
+  // --- Provenance from Akahu -------------------------------------------------
+  // Kept so the status page can show which bank an account came from without
+  // re-querying Akahu, and so a renamed account is still recognisable.
+  connectionName   String? // "ANZ", "BNZ" — Akahu's connection (bank) name
+  akahuName        String? // Akahu's own name for the account
+  accountType      String? // CHECKING / SAVINGS / CREDITCARD / ...
+  formattedAccount String? // "01-1234-1234567-00"
+  currency         String        @default("NZD")
+  status           AccountStatus @default(ACTIVE)
+
+  // --- Balance and reconciliation state -------------------------------------
+  balanceCents Int? // Akahu-reported current balance, in cents
+  balanceAsAt  DateTime? // when Akahu last refreshed that balance
+
+  // The balance that existed *before* our earliest imported transaction.
+  // Akahu only reaches back ~2 years, so "sum of stored transactions" can
+  // never equal the bank balance on its own. We derive this once at baseline
+  // (balance - sum of imported) and reconcile against it forever after.
+  openingBalanceCents Int?
+
+  // The earliest transaction date Akahu actually returned — this account's
+  // day zero. Answers "how far back does each bank's history reach?".
+  historyStartDate DateTime? @db.Date
+
+  // High-water mark for incremental pulls: the latest transaction *date* we
+  // hold, not the last run time. See src/lib/sync/window.ts for why that
+  // distinction matters.
+  lastTransactionAt DateTime?
 
   transactions Transaction[]
+  syncResults  AccountSyncResult[]
 }
 
 model Category {
@@ -98,10 +160,74 @@ model Transaction {
   // Unpaired transfers surface as a warning; paired ones net to zero.
   transferPairId String?
 
+  // --- Akahu enrichment, stored raw ------------------------------------------
+  // Phase 1 imports uncategorised on purpose: categoryId stays null and these
+  // fields hold what Akahu thinks. Phase 2 builds the real category list
+  // bottom-up from exactly this data, so it has to survive the import intact.
+  merchantName       String?
+  akahuCategoryName  String? // "Cafes and restaurants"
+  akahuCategoryGroup String? // "Lifestyle" (personal_finance grouping)
+  akahuType          String? // EFTPOS / TRANSFER / DIRECT DEBIT / ...
+  balanceAfterCents  Int? // running balance Akahu reported after this txn
+
+  // The untouched Akahu payload. Cheap insurance: if Phase 2 needs a field we
+  // didn't think to model, it's already here and doesn't need a re-pull
+  // (which the 1-hour refresh limit makes expensive). Never contains tokens.
+  raw Json?
+
+  importedAt DateTime @default(now())
+
   account  Account   @relation(fields: [accountId], references: [id])
   category Category? @relation(fields: [categoryId], references: [id])
 
   @@index([date])
   @@index([accountId, date])
   @@index([categoryId])
+}
+
+// One row per sync attempt — the audit trail that makes "the sync silently
+// stopped" a visible condition rather than a mystery.
+model SyncRun {
+  id      String      @id @default(cuid())
+  trigger SyncTrigger
+  status  SyncStatus  @default(RUNNING)
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  // Only set for a run-level failure (e.g. Akahu unreachable). Per-account
+  // errors live on AccountSyncResult so one bad account doesn't mask the rest.
+  error String?
+
+  accounts AccountSyncResult[]
+
+  @@index([startedAt])
+}
+
+// Per-account outcome within a run. Storing drift per run (rather than just
+// "current drift" on Account) is what lets us tell a transient blip — pending
+// transactions settling — from a real, persistent gap in our data.
+model AccountSyncResult {
+  id        String @id @default(cuid())
+  syncRunId String
+  accountId String
+
+  fetched    Int @default(0) // transactions Akahu returned
+  inserted   Int @default(0) // actually new to us
+  duplicates Int @default(0) // fetched - inserted; proof dedupe is working
+
+  windowStart DateTime? // the range we asked Akahu for (start is exclusive)
+  windowEnd   DateTime?
+
+  akahuBalanceCents    Int?
+  computedBalanceCents Int? // openingBalance + sum of everything we store
+  driftCents           Int? // akahu - computed; non-zero = we're missing rows
+
+  error String?
+
+  syncRun SyncRun @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([syncRunId, accountId])
+  @@index([accountId])
 }
