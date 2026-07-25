@@ -82,7 +82,10 @@ export function incrementalWindow(
 
 /** Read SYNC_LOOKBACK_DAYS, ignoring nonsense rather than crashing the worker. */
 export function lookbackDaysFromEnv(
-  env: NodeJS.ProcessEnv = process.env,
+  // Typed as a plain string map rather than NodeJS.ProcessEnv: Next.js
+  // augments ProcessEnv to require NODE_ENV, which would force every caller
+  // (and every test) to supply it just to read one unrelated variable.
+  env: Record<string, string | undefined> = process.env,
 ): number {
   const raw = env.SYNC_LOOKBACK_DAYS;
   if (!raw) return DEFAULT_LOOKBACK_DAYS;

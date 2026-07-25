@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Account, Transaction } from "akahu";
+import type { Account, RawTransaction } from "akahu";
 
 import {
   buildAccountName,
@@ -10,7 +10,11 @@ import {
 
 // A minimal but valid Akahu transaction, spread over in each test so every
 // case shows only what it's actually about.
-const baseTransaction = {
+//
+// Typed as RawTransaction (the unenriched half of the Transaction union)
+// rather than cast: if Akahu adds a required field, these fixtures stop
+// compiling, which is the warning we want.
+const baseTransaction: RawTransaction = {
   _id: "trans_test_1",
   _user: "user_test",
   _account: "acc_test_1",
@@ -22,7 +26,7 @@ const baseTransaction = {
   description: "COUNTDOWN WHANGAREI",
   amount: -85.4,
   type: "EFTPOS",
-} as const;
+};
 
 describe("toPostingDate", () => {
   it("keeps the UTC calendar date", () => {
@@ -46,7 +50,7 @@ describe("toPostingDate", () => {
 
 describe("normaliseTransaction", () => {
   it("converts amounts to integer cents", () => {
-    const result = normaliseTransaction(baseTransaction as Transaction);
+    const result = normaliseTransaction(baseTransaction);
     expect(result.amountCents).toBe(-8540);
   });
 
@@ -61,7 +65,7 @@ describe("normaliseTransaction", () => {
           personal_finance: { _id: "group_1", name: "Household" },
         },
       },
-    } as Transaction);
+    });
 
     expect(result.merchantName).toBe("Countdown");
     expect(result.akahuCategoryName).toBe("Groceries");
@@ -72,7 +76,7 @@ describe("normaliseTransaction", () => {
     // Akahu returns RawTransaction or EnrichedTransaction from the same
     // endpoint. A rent payment or a bank fee often has neither merchant nor
     // category, and must still import cleanly.
-    const result = normaliseTransaction(baseTransaction as Transaction);
+    const result = normaliseTransaction(baseTransaction);
 
     expect(result.merchantName).toBeNull();
     expect(result.akahuCategoryName).toBeNull();
@@ -84,7 +88,7 @@ describe("normaliseTransaction", () => {
       ...baseTransaction,
       merchant: { _id: "merchant_1", name: "Countdown" },
       category: { _id: "nzfcc_1", name: "Groceries", groups: {} },
-    } as Transaction);
+    });
 
     expect(result.akahuCategoryName).toBe("Groceries");
     expect(result.akahuCategoryGroup).toBeNull();
@@ -92,50 +96,57 @@ describe("normaliseTransaction", () => {
 
   it("keeps balance as cents, or null when the bank omitted it", () => {
     expect(
-      normaliseTransaction({ ...baseTransaction, balance: 100 } as Transaction)
+      normaliseTransaction({ ...baseTransaction, balance: 100 })
         .balanceAfterCents,
     ).toBe(10000);
 
     expect(
-      normaliseTransaction(baseTransaction as Transaction).balanceAfterCents,
+      normaliseTransaction(baseTransaction).balanceAfterCents,
     ).toBeNull();
   });
 
   it("preserves the raw payload for Phase 2", () => {
-    const input = { ...baseTransaction } as Transaction;
+    const input = { ...baseTransaction };
     expect(normaliseTransaction(input).raw).toBe(input);
   });
 
   it("uses Akahu's transaction id as the dedupe key", () => {
-    expect(normaliseTransaction(baseTransaction as Transaction).externalId).toBe(
+    expect(normaliseTransaction(baseTransaction).externalId).toBe(
       "trans_test_1",
     );
   });
 });
 
-const baseAccount = {
+const baseAccount: Account = {
   _id: "acc_test_1",
   _authorisation: "auth_test",
   _credentials: "deprecated",
-  connection: { _id: "conn_test_1", name: "ANZ", logo: "" },
+  // ANZ is on the official open banking integration now; "classic" is Akahu's
+  // own scraper. We don't read this field, but ConnectionInfo requires it.
+  connection: {
+    _id: "conn_test_1",
+    name: "ANZ",
+    logo: "",
+    connection_type: "official",
+  },
   name: "Everyday",
   status: "ACTIVE",
   type: "CHECKING",
   attributes: ["TRANSACTIONS"],
   balance: { currency: "NZD", current: 4820.55, available: 4700.0 },
-} as const;
+};
 
 describe("normaliseAccount", () => {
   it("uses the current balance, not the available balance", () => {
     // `available` subtracts holds and pending authorisations. Reconciliation
     // compares against settled transactions only, so `current` is the one
     // that can actually balance.
-    expect(normaliseAccount(baseAccount as Account).balanceCents).toBe(482055);
+    expect(normaliseAccount(baseAccount).balanceCents).toBe(482055);
   });
 
   it("handles an account with no balance at all", () => {
     const { balance: _balance, ...withoutBalance } = baseAccount;
-    const result = normaliseAccount(withoutBalance as Account);
+    const result = normaliseAccount(withoutBalance);
 
     expect(result.balanceCents).toBeNull();
     expect(result.currency).toBe("NZD");
@@ -149,10 +160,10 @@ describe("normaliseAccount", () => {
         ...baseAccount,
         type: "REWARDS",
         attributes: [],
-      } as unknown as Account).supportsTransactions,
+      }).supportsTransactions,
     ).toBe(false);
 
-    expect(normaliseAccount(baseAccount as Account).supportsTransactions).toBe(
+    expect(normaliseAccount(baseAccount).supportsTransactions).toBe(
       true,
     );
   });
@@ -161,12 +172,12 @@ describe("normaliseAccount", () => {
 describe("buildAccountName", () => {
   it("prefixes the bank so two 'Everyday' accounts don't collide", () => {
     expect(
-      buildAccountName(normaliseAccount(baseAccount as Account)),
+      buildAccountName(normaliseAccount(baseAccount)),
     ).toBe("ANZ Everyday");
   });
 
   it("falls back to the account name when there's no connection", () => {
-    const account = normaliseAccount(baseAccount as Account);
+    const account = normaliseAccount(baseAccount);
     expect(buildAccountName({ ...account, connectionName: null })).toBe(
       "Everyday",
     );
