@@ -6,6 +6,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { Book } from "@/generated/prisma/client";
+import { PERSISTENT_DRIFT_HOURS, isDriftPersistent } from "./reconcile";
 
 /**
  * How long without a successful sync before we call it stale.
@@ -63,11 +64,14 @@ export async function getSyncStatus(
     prisma.account.findMany({
       orderBy: { name: "asc" },
       include: {
-        // Three most recent results per account: one to display, and enough
-        // history to tell a one-off blip from drift that keeps coming back.
+        // Enough history to measure how long drift has lasted, not just how
+        // many runs it spanned. On the daily schedule 20 results is about
+        // three weeks; it only falls short if someone triggers 20+ manual
+        // syncs inside 24 hours, which Akahu's 1-hour refresh limit prevents
+        // in live mode anyway.
         syncResults: {
           orderBy: { syncRun: { startedAt: "desc" } },
-          take: 3,
+          take: 20,
           include: { syncRun: true },
         },
         _count: { select: { transactions: true } },
@@ -88,9 +92,10 @@ export async function getSyncStatus(
     const recent = account.syncResults;
     const latest = recent[0];
 
-    const driftHistory = recent
-      .map((result) => result.driftCents)
-      .filter((drift): drift is number => drift !== null);
+    const driftHistory = recent.map((result) => ({
+      driftCents: result.driftCents,
+      observedAt: result.syncRun.startedAt,
+    }));
 
     return {
       id: account.id,
@@ -102,9 +107,7 @@ export async function getSyncStatus(
       historyStartDate: account.historyStartDate,
       lastTransactionAt: account.lastTransactionAt,
       driftCents: latest?.driftCents ?? null,
-      driftIsPersistent:
-        driftHistory.length >= 2 &&
-        driftHistory.slice(0, 2).every((drift) => drift !== 0),
+      driftIsPersistent: isDriftPersistent(driftHistory),
       lastSyncedAt: latest?.syncRun.startedAt ?? null,
     };
   });
@@ -195,14 +198,17 @@ function buildAlerts(input: {
     });
   }
 
-  // 4. Persistent drift. A single run of drift is usually just a pending
-  //    transaction settling, so only repeated drift is worth raising.
+  // 4. Persistent drift. Drift on a single run — or on several runs in quick
+  //    succession — is usually a payment that has hit the balance but hasn't
+  //    settled into the transaction feed yet. Only drift that outlives a full
+  //    daily cycle is worth raising.
   for (const account of accounts.filter((a) => a.driftIsPersistent)) {
     alerts.push({
       level: "warning",
       message:
-        `${account.name}: balance drift has persisted across runs. ` +
-        `Transactions are probably missing — this is not a pending-payment blip.`,
+        `${account.name}: balance drift has lasted more than ` +
+        `${PERSISTENT_DRIFT_HOURS} hours. Transactions are probably missing — ` +
+        `a pending payment would have settled by now.`,
     });
   }
 
