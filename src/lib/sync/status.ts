@@ -206,7 +206,7 @@ function buildAlerts(input: {
     alerts.push({
       level: "warning",
       message:
-        `${account.name}: balance drift has lasted more than ` +
+        `${account.name}: balance drift has lasted at least ` +
         `${PERSISTENT_DRIFT_HOURS} hours. Transactions are probably missing — ` +
         `a pending payment would have settled by now.`,
     });
