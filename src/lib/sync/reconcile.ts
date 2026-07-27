@@ -159,6 +159,65 @@ export function isDriftWorthWarningAbout(
   return reconciliation !== null && reconciliation.driftCents !== 0;
 }
 
+/**
+ * How long drift has to stick around before it means something.
+ *
+ * Long enough to outlive a settling payment, short enough that a genuinely
+ * missing transaction surfaces the next morning rather than next week. One
+ * daily sync cycle.
+ */
+export const PERSISTENT_DRIFT_HOURS = 24;
+
+export type DriftObservation = {
+  driftCents: number | null;
+  observedAt: Date;
+};
+
+/**
+ * Has drift lasted long enough to be a real gap rather than a settling payment?
+ *
+ * The obvious implementation — "non-zero on the last two runs" — is wrong, and
+ * it produced a false alarm on real data within a day of being written. Two
+ * manually triggered syncs 45 minutes apart both saw the same drift, so the
+ * page announced it had "persisted across runs" when all it had really shown
+ * was that nothing settles in 45 minutes. Counting runs only means "two days"
+ * if runs happen daily, and the whole point of having a manual CLI is that
+ * they don't.
+ *
+ * So measure elapsed time instead. Drift is persistent when the most recent
+ * observation is non-zero and there's an unbroken stretch of non-zero drift
+ * reaching back at least {@link PERSISTENT_DRIFT_HOURS} — however many runs
+ * that took. A single zero anywhere in between resets the clock, because that
+ * means the books did balance and whatever we're seeing now is new.
+ */
+export function isDriftPersistent(
+  history: readonly DriftObservation[],
+  minimumHours: number = PERSISTENT_DRIFT_HOURS,
+): boolean {
+  // Newest first. Callers pass whatever order the database gave them.
+  const observed = history
+    .filter(
+      (entry): entry is DriftObservation & { driftCents: number } =>
+        entry.driftCents !== null,
+    )
+    .sort((a, b) => b.observedAt.getTime() - a.observedAt.getTime());
+
+  const newest = observed[0];
+  if (!newest || newest.driftCents === 0) return false;
+
+  // Walk back through the unbroken stretch of non-zero drift.
+  let oldestInStretch = newest;
+  for (const entry of observed.slice(1)) {
+    if (entry.driftCents === 0) break;
+    oldestInStretch = entry;
+  }
+
+  const spanMs =
+    newest.observedAt.getTime() - oldestInStretch.observedAt.getTime();
+
+  return spanMs >= minimumHours * 3_600_000;
+}
+
 /** Sum transaction amounts. Trivial, but named so call sites read clearly. */
 export function sumCents(amounts: readonly number[]): number {
   return amounts.reduce((total, amount) => total + amount, 0);

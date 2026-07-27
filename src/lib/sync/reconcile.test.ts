@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   deriveOpeningBalanceCents,
+  isDriftPersistent,
   isDriftWorthWarningAbout,
   reconcileAccount,
   resolveOpeningBalanceCents,
@@ -268,6 +269,112 @@ describe("isDriftWorthWarningAbout", () => {
         }),
       ).toBe(true);
     }
+  });
+});
+
+describe("isDriftPersistent", () => {
+  const at = (iso: string) => new Date(iso);
+
+  it("REGRESSION: two runs 45 minutes apart are not persistent", () => {
+    // The exact false alarm this function was written for, taken from real
+    // data: ANZ Money Card, two manual baselines on the same morning both
+    // seeing -$121.23. The old rule was "non-zero on the last two runs", which
+    // only means "two days" if runs happen daily — and the manual CLI means
+    // they don't. 45 minutes proves nothing about whether a payment settles.
+    expect(
+      isDriftPersistent([
+        { driftCents: -12123, observedAt: at("2026-07-27T10:11:33Z") },
+        { driftCents: -12123, observedAt: at("2026-07-27T09:27:07Z") },
+        { driftCents: 0, observedAt: at("2026-07-26T01:38:08Z") },
+      ]),
+    ).toBe(false);
+  });
+
+  it("flags drift that outlives a full daily cycle", () => {
+    expect(
+      isDriftPersistent([
+        { driftCents: -12123, observedAt: at("2026-07-28T07:00:00Z") },
+        { driftCents: -12123, observedAt: at("2026-07-27T07:00:00Z") },
+      ]),
+    ).toBe(true);
+  });
+
+  it("stays quiet on a single observation, however large", () => {
+    expect(
+      isDriftPersistent([
+        { driftCents: -999999, observedAt: at("2026-07-27T07:00:00Z") },
+      ]),
+    ).toBe(false);
+  });
+
+  it("stays quiet once the books balance again", () => {
+    // Drift cleared on the latest run — whatever it was, it settled.
+    expect(
+      isDriftPersistent([
+        { driftCents: 0, observedAt: at("2026-07-28T07:00:00Z") },
+        { driftCents: -12123, observedAt: at("2026-07-27T07:00:00Z") },
+        { driftCents: -12123, observedAt: at("2026-07-26T07:00:00Z") },
+      ]),
+    ).toBe(false);
+  });
+
+  it("resets the clock when drift cleared in between", () => {
+    // Old drift settled, new drift appeared an hour ago. The stretch that
+    // matters is the current one, not the total span of the history.
+    expect(
+      isDriftPersistent([
+        { driftCents: -500, observedAt: at("2026-07-28T08:00:00Z") },
+        { driftCents: -500, observedAt: at("2026-07-28T07:00:00Z") },
+        { driftCents: 0, observedAt: at("2026-07-27T07:00:00Z") },
+        { driftCents: -12123, observedAt: at("2026-07-20T07:00:00Z") },
+      ]),
+    ).toBe(false);
+  });
+
+  it("spans many runs of the same unbroken drift", () => {
+    // Hourly runs across three days: lots of runs, and genuinely persistent.
+    const history = Array.from({ length: 72 }, (_, hoursAgo) => ({
+      driftCents: -12123,
+      observedAt: new Date(Date.UTC(2026, 6, 28, 12 - hoursAgo)),
+    }));
+
+    expect(isDriftPersistent(history)).toBe(true);
+  });
+
+  it("ignores runs where drift could not be computed", () => {
+    // A null is "not checked" (no opening balance yet, or the account failed),
+    // not "balanced" — it must not break the stretch, nor extend it by itself.
+    expect(
+      isDriftPersistent([
+        { driftCents: -12123, observedAt: at("2026-07-28T07:00:00Z") },
+        { driftCents: null, observedAt: at("2026-07-27T19:00:00Z") },
+        { driftCents: -12123, observedAt: at("2026-07-27T06:00:00Z") },
+      ]),
+    ).toBe(true);
+  });
+
+  it("copes with history in any order", () => {
+    // Callers pass whatever order the database returned.
+    expect(
+      isDriftPersistent([
+        { driftCents: -12123, observedAt: at("2026-07-27T07:00:00Z") },
+        { driftCents: -12123, observedAt: at("2026-07-28T07:00:00Z") },
+      ]),
+    ).toBe(true);
+  });
+
+  it("handles an empty history", () => {
+    expect(isDriftPersistent([])).toBe(false);
+  });
+
+  it("honours a custom threshold", () => {
+    const history = [
+      { driftCents: -12123, observedAt: at("2026-07-27T10:00:00Z") },
+      { driftCents: -12123, observedAt: at("2026-07-27T08:00:00Z") },
+    ];
+
+    expect(isDriftPersistent(history, 1)).toBe(true);
+    expect(isDriftPersistent(history, 4)).toBe(false);
   });
 });
 
