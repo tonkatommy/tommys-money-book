@@ -157,6 +157,16 @@ function Accounts({
               )}
 
               {account.driftCents === 0 && <Badge tone="ok">balanced</Badge>}
+
+              {/* Neutral, not a warning. Pending authorisations are normal on
+                  a card account and reconciliation already accounts for them —
+                  but showing the figure explains why the bank's balance is
+                  lower than the transactions that have actually cleared. */}
+              {account.pendingTotalCents !== 0 && (
+                <Badge tone="neutral">
+                  {formatNZD(account.pendingTotalCents)} pending
+                </Badge>
+              )}
             </div>
 
             <dl className="mt-3 space-y-2 text-sm">

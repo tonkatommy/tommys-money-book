@@ -82,4 +82,17 @@ export interface AkahuGateway {
     akahuAccountId: string,
     window: TransactionWindow,
   ): Promise<NormalisedTransaction[]>;
+  /**
+   * Total unsettled authorisations per account, keyed by Akahu account id.
+   *
+   * Totals, deliberately, rather than the transactions themselves. Pending
+   * rows carry unstable ids and their amounts change when they settle, so
+   * importing them would poison `externalId` dedupe and leave phantom rows
+   * behind when they vanish. The only thing needed is the sum, because the
+   * bank's reported balance already includes these — see
+   * src/lib/sync/reconcile.ts.
+   *
+   * Accounts with nothing pending are simply absent from the map.
+   */
+  pendingTotalsByAccount(): Promise<Map<string, number>>;
 }

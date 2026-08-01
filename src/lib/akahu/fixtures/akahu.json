@@ -13,7 +13,6 @@
     "",
     "No real account numbers or ids. Nothing here is sensitive."
   ],
-
   "accounts": [
     {
       "_id": "acc_fixture_anz_everyday01",
@@ -28,11 +27,15 @@
       "status": "ACTIVE",
       "formatted_account": "01-0001-0000001-00",
       "type": "CHECKING",
-      "attributes": ["TRANSACTIONS", "PAYMENT_TO", "PAYMENT_FROM"],
+      "attributes": [
+        "TRANSACTIONS",
+        "PAYMENT_TO",
+        "PAYMENT_FROM"
+      ],
       "balance": {
         "currency": "NZD",
-        "current": 4820.55,
-        "available": 4820.55,
+        "current": 4792.05,
+        "available": 4792.05,
         "overdrawn": false
       },
       "refreshed": {
@@ -53,7 +56,11 @@
       "status": "ACTIVE",
       "formatted_account": "02-0002-0000002-00",
       "type": "CHECKING",
-      "attributes": ["TRANSACTIONS", "PAYMENT_TO", "PAYMENT_FROM"],
+      "attributes": [
+        "TRANSACTIONS",
+        "PAYMENT_TO",
+        "PAYMENT_FROM"
+      ],
       "balance": {
         "currency": "NZD",
         "current": 12750.4,
@@ -78,11 +85,15 @@
       "status": "ACTIVE",
       "type": "REWARDS",
       "attributes": [],
-      "balance": { "currency": "NZD", "current": 38.2 },
-      "refreshed": { "balance": "2026-07-25T06:00:00.000Z" }
+      "balance": {
+        "currency": "NZD",
+        "current": 38.2
+      },
+      "refreshed": {
+        "balance": "2026-07-25T06:00:00.000Z"
+      }
     }
   ],
-
   "transactions": [
     {
       "_id": "trans_fixture_0000000000001",
@@ -101,7 +112,10 @@
         "_id": "nzfcc_fixture_income00001",
         "name": "Wages and salaries",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_1", "name": "Income" }
+          "personal_finance": {
+            "_id": "group_fixture_1",
+            "name": "Income"
+          }
         }
       }
     },
@@ -118,12 +132,18 @@
       "amount": -85.4,
       "balance": 3326.7,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_cd01", "name": "Countdown" },
+      "merchant": {
+        "_id": "merchant_fixture_cd01",
+        "name": "Countdown"
+      },
       "category": {
         "_id": "nzfcc_fixture_groceries1",
         "name": "Groceries",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+          "personal_finance": {
+            "_id": "group_fixture_2",
+            "name": "Household"
+          }
         }
       }
     },
@@ -154,12 +174,18 @@
       "amount": -5.5,
       "balance": 1471.2,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_cs01", "name": "Coffee Supreme" },
+      "merchant": {
+        "_id": "merchant_fixture_cs01",
+        "name": "Coffee Supreme"
+      },
       "category": {
         "_id": "nzfcc_fixture_cafes0001",
         "name": "Cafes and restaurants",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_3", "name": "Lifestyle" }
+          "personal_finance": {
+            "_id": "group_fixture_3",
+            "name": "Lifestyle"
+          }
         }
       }
     },
@@ -176,12 +202,18 @@
       "amount": -240.99,
       "balance": 1230.21,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_m1001", "name": "Mitre 10" },
+      "merchant": {
+        "_id": "merchant_fixture_m1001",
+        "name": "Mitre 10"
+      },
       "category": {
         "_id": "nzfcc_fixture_hardware1",
         "name": "Hardware and garden",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+          "personal_finance": {
+            "_id": "group_fixture_2",
+            "name": "Household"
+          }
         }
       }
     },
@@ -198,12 +230,18 @@
       "amount": -62.3,
       "balance": 1167.91,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_z001", "name": "Z Energy" },
+      "merchant": {
+        "_id": "merchant_fixture_z001",
+        "name": "Z Energy"
+      },
       "category": {
         "_id": "nzfcc_fixture_fuel00001",
         "name": "Fuel",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_4", "name": "Transport" }
+          "personal_finance": {
+            "_id": "group_fixture_4",
+            "name": "Transport"
+          }
         }
       }
     },
@@ -234,12 +272,18 @@
       "amount": -110.0,
       "balance": 1070.26,
       "type": "DIRECT DEBIT",
-      "merchant": { "_id": "merchant_fixture_ps01", "name": "Powershop" },
+      "merchant": {
+        "_id": "merchant_fixture_ps01",
+        "name": "Powershop"
+      },
       "category": {
         "_id": "nzfcc_fixture_power0001",
         "name": "Power",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+          "personal_finance": {
+            "_id": "group_fixture_2",
+            "name": "Household"
+          }
         }
       }
     },
@@ -256,12 +300,18 @@
       "amount": -35.0,
       "balance": 1035.26,
       "type": "DIRECT DEBIT",
-      "merchant": { "_id": "merchant_fixture_nf01", "name": "Netflix" },
+      "merchant": {
+        "_id": "merchant_fixture_nf01",
+        "name": "Netflix"
+      },
       "category": {
         "_id": "nzfcc_fixture_subs00001",
         "name": "Subscriptions",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_3", "name": "Lifestyle" }
+          "personal_finance": {
+            "_id": "group_fixture_3",
+            "name": "Lifestyle"
+          }
         }
       }
     },
@@ -282,7 +332,10 @@
         "_id": "nzfcc_fixture_income00001",
         "name": "Wages and salaries",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_1", "name": "Income" }
+          "personal_finance": {
+            "_id": "group_fixture_1",
+            "name": "Income"
+          }
         }
       }
     },
@@ -299,12 +352,18 @@
       "amount": -1234.56,
       "balance": 3000.7,
       "type": "DIRECT DEBIT",
-      "merchant": { "_id": "merchant_fixture_aa01", "name": "AA Insurance" },
+      "merchant": {
+        "_id": "merchant_fixture_aa01",
+        "name": "AA Insurance"
+      },
       "category": {
         "_id": "nzfcc_fixture_ins000001",
         "name": "Insurance",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+          "personal_finance": {
+            "_id": "group_fixture_2",
+            "name": "Household"
+          }
         }
       }
     },
@@ -335,12 +394,18 @@
       "amount": -420.0,
       "balance": 2580.63,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_air1", "name": "Air New Zealand" },
+      "merchant": {
+        "_id": "merchant_fixture_air1",
+        "name": "Air New Zealand"
+      },
       "category": {
         "_id": "nzfcc_fixture_travel001",
         "name": "Travel",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_3", "name": "Lifestyle" }
+          "personal_finance": {
+            "_id": "group_fixture_3",
+            "name": "Lifestyle"
+          }
         }
       }
     },
@@ -357,12 +422,18 @@
       "amount": -95.2,
       "balance": 2485.43,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_nw01", "name": "New World" },
+      "merchant": {
+        "_id": "merchant_fixture_nw01",
+        "name": "New World"
+      },
       "category": {
         "_id": "nzfcc_fixture_groceries1",
         "name": "Groceries",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+          "personal_finance": {
+            "_id": "group_fixture_2",
+            "name": "Household"
+          }
         }
       }
     },
@@ -397,7 +468,10 @@
         "_id": "nzfcc_fixture_income00001",
         "name": "Wages and salaries",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_1", "name": "Income" }
+          "personal_finance": {
+            "_id": "group_fixture_1",
+            "name": "Income"
+          }
         }
       }
     },
@@ -414,12 +488,18 @@
       "amount": -18.9,
       "balance": 4366.53,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_ue01", "name": "Uber Eats" },
+      "merchant": {
+        "_id": "merchant_fixture_ue01",
+        "name": "Uber Eats"
+      },
       "category": {
         "_id": "nzfcc_fixture_takeaway1",
         "name": "Takeaway",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_3", "name": "Lifestyle" }
+          "personal_finance": {
+            "_id": "group_fixture_3",
+            "name": "Lifestyle"
+          }
         }
       }
     },
@@ -436,12 +516,18 @@
       "amount": -110.0,
       "balance": 4256.53,
       "type": "DIRECT DEBIT",
-      "merchant": { "_id": "merchant_fixture_ps01", "name": "Powershop" },
+      "merchant": {
+        "_id": "merchant_fixture_ps01",
+        "name": "Powershop"
+      },
       "category": {
         "_id": "nzfcc_fixture_power0001",
         "name": "Power",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+          "personal_finance": {
+            "_id": "group_fixture_2",
+            "name": "Household"
+          }
         }
       }
     },
@@ -458,12 +544,18 @@
       "amount": -76.45,
       "balance": 4180.08,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_cd01", "name": "Countdown" },
+      "merchant": {
+        "_id": "merchant_fixture_cd01",
+        "name": "Countdown"
+      },
       "category": {
         "_id": "nzfcc_fixture_groceries1",
         "name": "Groceries",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+          "personal_finance": {
+            "_id": "group_fixture_2",
+            "name": "Household"
+          }
         }
       }
     },
@@ -480,16 +572,21 @@
       "amount": -5.5,
       "balance": 4174.58,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_cs01", "name": "Coffee Supreme" },
+      "merchant": {
+        "_id": "merchant_fixture_cs01",
+        "name": "Coffee Supreme"
+      },
       "category": {
         "_id": "nzfcc_fixture_cafes0001",
         "name": "Cafes and restaurants",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_3", "name": "Lifestyle" }
+          "personal_finance": {
+            "_id": "group_fixture_3",
+            "name": "Lifestyle"
+          }
         }
       }
     },
-
     {
       "_id": "trans_fixture_0000000000021",
       "_user": "user_fixture00000000000001",
@@ -517,12 +614,18 @@
       "amount": -129.0,
       "balance": 721.0,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_bun1", "name": "Bunnings" },
+      "merchant": {
+        "_id": "merchant_fixture_bun1",
+        "name": "Bunnings"
+      },
       "category": {
         "_id": "nzfcc_fixture_hardware1",
         "name": "Hardware and garden",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+          "personal_finance": {
+            "_id": "group_fixture_2",
+            "name": "Household"
+          }
         }
       }
     },
@@ -553,12 +656,18 @@
       "amount": -49.99,
       "balance": 3071.01,
       "type": "DIRECT DEBIT",
-      "merchant": { "_id": "merchant_fixture_xr01", "name": "Xero" },
+      "merchant": {
+        "_id": "merchant_fixture_xr01",
+        "name": "Xero"
+      },
       "category": {
         "_id": "nzfcc_fixture_software1",
         "name": "Software",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_5", "name": "Technology" }
+          "personal_finance": {
+            "_id": "group_fixture_5",
+            "name": "Technology"
+          }
         }
       }
     },
@@ -589,12 +698,18 @@
       "amount": -320.75,
       "balance": 4500.26,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_pm01", "name": "PlaceMakers" },
+      "merchant": {
+        "_id": "merchant_fixture_pm01",
+        "name": "PlaceMakers"
+      },
       "category": {
         "_id": "nzfcc_fixture_hardware1",
         "name": "Hardware and garden",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_2", "name": "Household" }
+          "personal_finance": {
+            "_id": "group_fixture_2",
+            "name": "Household"
+          }
         }
       }
     },
@@ -611,12 +726,18 @@
       "amount": -49.99,
       "balance": 4450.27,
       "type": "DIRECT DEBIT",
-      "merchant": { "_id": "merchant_fixture_xr01", "name": "Xero" },
+      "merchant": {
+        "_id": "merchant_fixture_xr01",
+        "name": "Xero"
+      },
       "category": {
         "_id": "nzfcc_fixture_software1",
         "name": "Software",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_5", "name": "Technology" }
+          "personal_finance": {
+            "_id": "group_fixture_5",
+            "name": "Technology"
+          }
         }
       }
     },
@@ -647,12 +768,18 @@
       "amount": -215.6,
       "balance": 7334.67,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_rp01", "name": "Repco" },
+      "merchant": {
+        "_id": "merchant_fixture_rp01",
+        "name": "Repco"
+      },
       "category": {
         "_id": "nzfcc_fixture_vehicle01",
         "name": "Vehicle maintenance",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_4", "name": "Transport" }
+          "personal_finance": {
+            "_id": "group_fixture_4",
+            "name": "Transport"
+          }
         }
       }
     },
@@ -697,12 +824,18 @@
       "amount": -49.99,
       "balance": 11434.68,
       "type": "DIRECT DEBIT",
-      "merchant": { "_id": "merchant_fixture_xr01", "name": "Xero" },
+      "merchant": {
+        "_id": "merchant_fixture_xr01",
+        "name": "Xero"
+      },
       "category": {
         "_id": "nzfcc_fixture_software1",
         "name": "Software",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_5", "name": "Technology" }
+          "personal_finance": {
+            "_id": "group_fixture_5",
+            "name": "Technology"
+          }
         }
       }
     },
@@ -747,12 +880,18 @@
       "amount": -142.3,
       "balance": 12392.38,
       "type": "EFTPOS",
-      "merchant": { "_id": "merchant_fixture_mb01", "name": "Mobil" },
+      "merchant": {
+        "_id": "merchant_fixture_mb01",
+        "name": "Mobil"
+      },
       "category": {
         "_id": "nzfcc_fixture_fuel00001",
         "name": "Fuel",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_4", "name": "Transport" }
+          "personal_finance": {
+            "_id": "group_fixture_4",
+            "name": "Transport"
+          }
         }
       }
     },
@@ -769,14 +908,34 @@
       "amount": -49.99,
       "balance": 12342.39,
       "type": "DIRECT DEBIT",
-      "merchant": { "_id": "merchant_fixture_xr01", "name": "Xero" },
+      "merchant": {
+        "_id": "merchant_fixture_xr01",
+        "name": "Xero"
+      },
       "category": {
         "_id": "nzfcc_fixture_software1",
         "name": "Software",
         "groups": {
-          "personal_finance": { "_id": "group_fixture_5", "name": "Technology" }
+          "personal_finance": {
+            "_id": "group_fixture_5",
+            "name": "Technology"
+          }
         }
       }
+    }
+  ],
+  "pending": [
+    {
+      "_account": "acc_fixture_anz_everyday01",
+      "date": "2026-07-31T00:00:00.000Z",
+      "amount": -23.5,
+      "description": "MCDONALDS WESTGATE Card number: 4835 **** **** 8906"
+    },
+    {
+      "_account": "acc_fixture_anz_everyday01",
+      "date": "2026-08-01T00:00:00.000Z",
+      "amount": -5.0,
+      "description": "VAPE N VILLE Card number: 4835 **** **** 8906"
     }
   ]
 }
