@@ -26,12 +26,22 @@
 //
 // Pure arithmetic, all in integer cents.
 
-/** Derive the opening balance at baseline. */
+/**
+ * Derive the opening balance at baseline.
+ *
+ * Pending has to come out too. The bank's balance includes unsettled
+ * authorisations; the transactions we imported do not. Subtracting only the
+ * settled total would fold whatever happened to be pending at that instant
+ * into the opening balance permanently — and because the opening balance is
+ * never recomputed on ordinary runs, that error would show up as constant
+ * drift on every future sync with nothing to point at.
+ */
 export function deriveOpeningBalanceCents(
   akahuBalanceCents: number,
   importedTotalCents: number,
+  pendingTotalCents = 0,
 ): number {
-  return akahuBalanceCents - importedTotalCents;
+  return akahuBalanceCents - importedTotalCents - pendingTotalCents;
 }
 
 /**
@@ -66,6 +76,8 @@ export function resolveOpeningBalanceCents(input: {
   akahuBalanceCents: number | null;
   /** Sum of everything we now hold for this account. */
   storedTotalCents: number;
+  /** Unsettled authorisations right now — excluded from the derivation. */
+  pendingTotalCents: number;
   /** Earliest transaction we now hold; null when we hold none. */
   earliestTransactionDate: Date | null;
   /** The earliest we held before this run, i.e. Account.historyStartDate. */
@@ -75,6 +87,7 @@ export function resolveOpeningBalanceCents(input: {
     storedOpeningBalanceCents,
     akahuBalanceCents,
     storedTotalCents,
+    pendingTotalCents,
     earliestTransactionDate,
     previousHistoryStartDate,
   } = input;
@@ -94,7 +107,11 @@ export function resolveOpeningBalanceCents(input: {
   const neverDerived = storedOpeningBalanceCents === null;
 
   if (neverDerived || historyReachesFurtherBack) {
-    return deriveOpeningBalanceCents(akahuBalanceCents, storedTotalCents);
+    return deriveOpeningBalanceCents(
+      akahuBalanceCents,
+      storedTotalCents,
+      pendingTotalCents,
+    );
   }
 
   // Rule 3.
@@ -102,8 +119,12 @@ export function resolveOpeningBalanceCents(input: {
 }
 
 export type Reconciliation = {
-  /** openingBalance + sum of stored transactions. */
+  /** openingBalance + settled transactions + pending. Compared with Akahu. */
   computedBalanceCents: number;
+  /** openingBalance + settled only — what has actually cleared the bank. */
+  settledBalanceCents: number;
+  /** Sum of unsettled authorisations. Negative for pending card spending. */
+  pendingTotalCents: number;
   /** akahuBalance - computed. Zero is healthy. */
   driftCents: number;
   /** Convenience flag for the status page. */
@@ -112,6 +133,27 @@ export type Reconciliation = {
 
 /**
  * Compare Akahu's reported balance against what our stored transactions imply.
+ *
+ * **Pending transactions have to be in this sum, and finding out why took a
+ * real investigation.** ANZ Money Card showed drift of -$121.23, then -$233.02
+ * five days later. It looked like missing transactions.
+ *
+ * It wasn't. Every stored row on that account formed an unbroken chain against
+ * Akahu's own per-transaction running balance — no gaps at all after the first
+ * day of history. The actual cause: ANZ's reported `current` balance already
+ * reflects card authorisations that haven't settled, while
+ * `/accounts/{id}/transactions` returns only settled rows. Akahu's pending
+ * endpoint listed ten authorisations totalling exactly -$233.02.
+ *
+ * So the old comparison was structurally wrong, not unlucky. It measured
+ * settled money against a balance that included unsettled money, which meant
+ * any account with live card activity showed permanent non-zero drift. That is
+ * worse than no check: a warning that is always on is a warning nobody reads,
+ * and it would have buried a genuinely missing transaction in noise.
+ *
+ * Pending rows are still never *imported* — their ids are unstable and their
+ * amounts change when they settle, which would poison externalId dedupe. Only
+ * their total is used, and only here.
  *
  * Returns null when we can't make a meaningful comparison — no balance from
  * Akahu, or no opening balance derived yet (an account that has never had a
@@ -122,18 +164,28 @@ export function reconcileAccount(input: {
   akahuBalanceCents: number | null;
   openingBalanceCents: number | null;
   storedTotalCents: number;
+  /** Sum of Akahu's pending authorisations for this account, in cents. */
+  pendingTotalCents: number;
 }): Reconciliation | null {
-  const { akahuBalanceCents, openingBalanceCents, storedTotalCents } = input;
+  const {
+    akahuBalanceCents,
+    openingBalanceCents,
+    storedTotalCents,
+    pendingTotalCents,
+  } = input;
 
   if (akahuBalanceCents === null || openingBalanceCents === null) {
     return null;
   }
 
-  const computedBalanceCents = openingBalanceCents + storedTotalCents;
+  const settledBalanceCents = openingBalanceCents + storedTotalCents;
+  const computedBalanceCents = settledBalanceCents + pendingTotalCents;
   const driftCents = akahuBalanceCents - computedBalanceCents;
 
   return {
     computedBalanceCents,
+    settledBalanceCents,
+    pendingTotalCents,
     driftCents,
     inBalance: driftCents === 0,
   };

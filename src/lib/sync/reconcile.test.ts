@@ -28,13 +28,54 @@ describe("reconcileAccount", () => {
       akahuBalanceCents: 482055,
       openingBalanceCents: 85807,
       storedTotalCents: 396248,
+      pendingTotalCents: 0,
     });
 
     expect(result).toEqual({
       computedBalanceCents: 482055,
+      settledBalanceCents: 482055,
+      pendingTotalCents: 0,
       driftCents: 0,
       inBalance: true,
     });
+  });
+
+  it("balances when unsettled card authorisations are in the bank's balance", () => {
+    // The bug this replaces. ANZ's reported `current` balance already reflects
+    // pending card authorisations, but the transaction feed only carries
+    // settled rows — so an actively used card account showed permanent drift
+    // exactly equal to whatever was pending.
+    //
+    // Real numbers from ANZ Money Card, 01/08/2026: ten pending authorisations
+    // totalling -$233.02, and drift of precisely -$233.02.
+    const result = reconcileAccount({
+      akahuBalanceCents: 2055,
+      openingBalanceCents: 60922,
+      storedTotalCents: -35565,
+      pendingTotalCents: -23302,
+    });
+
+    expect(result?.driftCents).toBe(0);
+    expect(result?.inBalance).toBe(true);
+    // The settled figure is still reported, because "what has actually cleared"
+    // is the number that reconciles against a bank statement.
+    expect(result?.settledBalanceCents).toBe(25357);
+    expect(result?.pendingTotalCents).toBe(-23302);
+  });
+
+  it("still catches a missing transaction while something is pending", () => {
+    // The check has to keep its teeth. Pending explains part of the gap; a
+    // genuinely missing row must still show up as the remainder.
+    const missing = -8540;
+
+    const result = reconcileAccount({
+      akahuBalanceCents: 2055,
+      openingBalanceCents: 60922,
+      storedTotalCents: -35565 - missing,
+      pendingTotalCents: -23302,
+    });
+
+    expect(result?.driftCents).toBe(missing);
   });
 
   it("reports drift equal to exactly the missing transaction", () => {
@@ -47,6 +88,7 @@ describe("reconcileAccount", () => {
       akahuBalanceCents: 482055,
       openingBalanceCents: 85807,
       storedTotalCents: 396248 - missing,
+      pendingTotalCents: 0,
     });
 
     expect(result!.driftCents).toBe(missing);
@@ -61,6 +103,7 @@ describe("reconcileAccount", () => {
         akahuBalanceCents: null,
         openingBalanceCents: 85807,
         storedTotalCents: 396248,
+        pendingTotalCents: 0,
       }),
     ).toBeNull();
 
@@ -69,6 +112,7 @@ describe("reconcileAccount", () => {
         akahuBalanceCents: 482055,
         openingBalanceCents: null,
         storedTotalCents: 396248,
+        pendingTotalCents: 0,
       }),
     ).toBeNull();
   });
@@ -80,6 +124,7 @@ describe("reconcileAccount", () => {
       akahuBalanceCents: 10000,
       openingBalanceCents: 0,
       storedTotalCents: 10000,
+      pendingTotalCents: 0,
     });
 
     expect(result).not.toBeNull();
@@ -98,8 +143,12 @@ describe("reconcileAccount", () => {
     );
 
     expect(
-      reconcileAccount({ akahuBalanceCents, openingBalanceCents: opening, storedTotalCents })!
-        .driftCents,
+      reconcileAccount({
+        akahuBalanceCents,
+        openingBalanceCents: opening,
+        storedTotalCents,
+        pendingTotalCents: 0,
+      })!.driftCents,
     ).toBe(0);
   });
 });
@@ -121,6 +170,7 @@ describe("resolveOpeningBalanceCents", () => {
         storedOpeningBalanceCents: null,
         akahuBalanceCents: ANZ_BALANCE,
         storedTotalCents: 0,
+        pendingTotalCents: 0,
         earliestTransactionDate: null,
         previousHistoryStartDate: null,
       }),
@@ -135,6 +185,7 @@ describe("resolveOpeningBalanceCents", () => {
         storedOpeningBalanceCents: null,
         akahuBalanceCents: ANZ_BALANCE,
         storedTotalCents: ALL_TRANSACTIONS,
+        pendingTotalCents: 0,
         earliestTransactionDate: DAY_ZERO,
         previousHistoryStartDate: null,
       }),
@@ -149,6 +200,7 @@ describe("resolveOpeningBalanceCents", () => {
         storedOpeningBalanceCents: 85807,
         akahuBalanceCents: ANZ_BALANCE,
         storedTotalCents: ALL_TRANSACTIONS,
+        pendingTotalCents: 0,
         earliestTransactionDate: DAY_ZERO,
         previousHistoryStartDate: DAY_ZERO,
       }),
@@ -165,6 +217,7 @@ describe("resolveOpeningBalanceCents", () => {
         storedOpeningBalanceCents: 85807,
         akahuBalanceCents: ANZ_BALANCE,
         storedTotalCents: withOneMissing,
+        pendingTotalCents: 0,
         earliestTransactionDate: DAY_ZERO,
         previousHistoryStartDate: DAY_ZERO,
       }),
@@ -180,6 +233,7 @@ describe("resolveOpeningBalanceCents", () => {
         storedOpeningBalanceCents: 300000, // derived from a partial history
         akahuBalanceCents: ANZ_BALANCE,
         storedTotalCents: ALL_TRANSACTIONS,
+        pendingTotalCents: 0,
         earliestTransactionDate: DAY_ZERO,
         previousHistoryStartDate: new Date("2026-01-01T00:00:00.000Z"),
       }),
@@ -194,6 +248,7 @@ describe("resolveOpeningBalanceCents", () => {
         storedOpeningBalanceCents: 85807,
         akahuBalanceCents: ANZ_BALANCE,
         storedTotalCents: ALL_TRANSACTIONS,
+        pendingTotalCents: 0,
         earliestTransactionDate: new Date("2026-01-01T00:00:00.000Z"),
         previousHistoryStartDate: DAY_ZERO,
       }),
@@ -208,6 +263,7 @@ describe("resolveOpeningBalanceCents", () => {
         storedOpeningBalanceCents: 0,
         akahuBalanceCents: 10000,
         storedTotalCents: 5000,
+        pendingTotalCents: 0,
         earliestTransactionDate: DAY_ZERO,
         previousHistoryStartDate: DAY_ZERO,
       }),
@@ -220,6 +276,7 @@ describe("resolveOpeningBalanceCents", () => {
         storedOpeningBalanceCents: null,
         akahuBalanceCents: null,
         storedTotalCents: ALL_TRANSACTIONS,
+        pendingTotalCents: 0,
         earliestTransactionDate: DAY_ZERO,
         previousHistoryStartDate: null,
       }),
@@ -233,6 +290,7 @@ describe("resolveOpeningBalanceCents", () => {
       storedOpeningBalanceCents: null,
       akahuBalanceCents: ANZ_BALANCE,
       storedTotalCents: ALL_TRANSACTIONS,
+      pendingTotalCents: 0,
       earliestTransactionDate: DAY_ZERO,
       previousHistoryStartDate: null,
     });
@@ -242,6 +300,7 @@ describe("resolveOpeningBalanceCents", () => {
         akahuBalanceCents: ANZ_BALANCE,
         openingBalanceCents: opening,
         storedTotalCents: ALL_TRANSACTIONS,
+        pendingTotalCents: 0,
       })!.driftCents,
     ).toBe(0);
   });
@@ -253,6 +312,8 @@ describe("isDriftWorthWarningAbout", () => {
     expect(
       isDriftWorthWarningAbout({
         computedBalanceCents: 100,
+        settledBalanceCents: 100,
+        pendingTotalCents: 0,
         driftCents: 0,
         inBalance: true,
       }),
@@ -264,6 +325,8 @@ describe("isDriftWorthWarningAbout", () => {
       expect(
         isDriftWorthWarningAbout({
           computedBalanceCents: 100,
+          settledBalanceCents: 100,
+          pendingTotalCents: 0,
           driftCents,
           inBalance: false,
         }),

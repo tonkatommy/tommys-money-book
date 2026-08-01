@@ -64,6 +64,18 @@ export async function runSync(options: SyncOptions): Promise<SyncSummary> {
     const accounts = await upsertAccounts(prisma, akahuAccounts);
     console.log(`[sync] ${accounts.length} account(s) from Akahu`);
 
+    // One profile-wide call for every account's unsettled authorisations.
+    // The bank's reported balance already includes these, so reconciliation
+    // has to subtract them back out — without it, any account with live card
+    // activity shows permanent drift. See src/lib/sync/reconcile.ts.
+    const pendingByAkahuId = await gateway.pendingTotalsByAccount();
+    const pendingCount = pendingByAkahuId.size;
+    if (pendingCount > 0) {
+      console.log(
+        `[sync] ${pendingCount} account(s) have unsettled authorisations`,
+      );
+    }
+
     // Index by akahuId so each DB row can find its Akahu counterpart (which
     // carries the balance we reconcile against).
     const byAkahuId = new Map(akahuAccounts.map((a) => [a.akahuId, a]));
@@ -92,6 +104,9 @@ export async function runSync(options: SyncOptions): Promise<SyncSummary> {
           gateway,
           account,
           akahuBalanceCents: akahuAccount.balanceCents,
+          // Absent from the map means nothing pending, which is zero — not
+          // unknown. Every account Akahu returned was covered by the call.
+          pendingTotalCents: pendingByAkahuId.get(akahuAccount.akahuId) ?? 0,
           syncRunId: syncRun.id,
           mode,
           now,
@@ -163,12 +178,21 @@ async function syncAccount(input: {
   gateway: AkahuGateway;
   account: Account;
   akahuBalanceCents: number | null;
+  pendingTotalCents: number;
   syncRunId: string;
   mode: SyncMode;
   now: Date;
 }): Promise<ImportCounts> {
-  const { prisma, gateway, account, akahuBalanceCents, syncRunId, mode, now } =
-    input;
+  const {
+    prisma,
+    gateway,
+    account,
+    akahuBalanceCents,
+    pendingTotalCents,
+    syncRunId,
+    mode,
+    now,
+  } = input;
 
   const window =
     mode === "baseline"
@@ -208,6 +232,7 @@ async function syncAccount(input: {
     storedOpeningBalanceCents: account.openingBalanceCents,
     akahuBalanceCents,
     storedTotalCents: storedTotal,
+    pendingTotalCents,
     earliestTransactionDate: historyStart,
     previousHistoryStartDate: account.historyStartDate,
   });
@@ -216,12 +241,14 @@ async function syncAccount(input: {
     akahuBalanceCents,
     openingBalanceCents,
     storedTotalCents: storedTotal,
+    pendingTotalCents,
   });
 
   await prisma.account.update({
     where: { id: account.id },
     data: {
       openingBalanceCents,
+      pendingTotalCents,
       historyStartDate: historyStart,
       lastTransactionAt: lastTransaction,
     },
@@ -237,6 +264,8 @@ async function syncAccount(input: {
       windowEnd: window.end,
       akahuBalanceCents,
       computedBalanceCents: reconciliation?.computedBalanceCents ?? null,
+      settledBalanceCents: reconciliation?.settledBalanceCents ?? null,
+      pendingTotalCents: reconciliation?.pendingTotalCents ?? null,
       driftCents: reconciliation?.driftCents ?? null,
     },
     update: {
@@ -245,6 +274,8 @@ async function syncAccount(input: {
       windowEnd: window.end,
       akahuBalanceCents,
       computedBalanceCents: reconciliation?.computedBalanceCents ?? null,
+      settledBalanceCents: reconciliation?.settledBalanceCents ?? null,
+      pendingTotalCents: reconciliation?.pendingTotalCents ?? null,
       driftCents: reconciliation?.driftCents ?? null,
       error: null,
     },

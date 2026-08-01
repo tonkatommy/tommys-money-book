@@ -1,0 +1,18 @@
+# Line endings.
+#
+# This repo is developed on Windows (core.autocrlf=true) and runs on Linux in
+# Docker. Left alone, git checks shell scripts out with CRLF line endings, and
+# a script whose shebang line ends in \r fails inside the container with:
+#
+#   exec /opt/backup/backup.sh: no such file or directory
+#
+# which points at the file, not at the invisible carriage return that's
+# actually the problem. Pinning LF for everything the container executes means
+# the same bytes exist on Windows, on Linux, and in the image.
+* text=auto eol=lf
+
+# Binary — never touch these.
+*.png binary
+*.jpg binary
+*.ico binary
+*.dump binary
