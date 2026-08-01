@@ -184,18 +184,19 @@ run automatically; apply them with `npm run db:migrate`.
 ## Status
 
 Phases 1 and 2 complete, running against twelve months of real bank data —
-2,642 transactions across 11 accounts, 16/07/2025 to 24/07/2026.
+2,687 transactions across 11 accounts, from 16/07/2025.
 
 The database fills itself: accounts and transactions sync from Akahu, dedupe
 on Akahu's transaction ID, reconcile against the reported balance, categorise
 themselves against the rule set, and log every run.
 
-Of the baseline, **82% categorised automatically** — 806 transfer legs paired
-and 1,361 matched by rule, leaving 475 in the review queue. Rolling 12-month
-business turnover is $982.84 against the $60,000 GST threshold, and all four
-tax questions the IR3 needs (rental income and expenses, business income and
-expenses by type, home office eligible costs, GST turnover) are answerable
-from the tax tags.
+**82% categorised automatically** — 818 transfer legs paired and 1,382 matched
+by rule, leaving 487 in the review queue (about half of which are deliberate:
+transfer suggestions awaiting confirmation, and one payee stream that needs a
+human to split it). Rolling 12-month business turnover is $982.84 against the
+$60,000 GST threshold, and all four tax questions the IR3 needs — rental
+income and expenses, business income and expenses by type, home office
+eligible costs, GST turnover — are answerable from the tax tags.
 
 Phase 2 overturned one of the plan's assumptions. It expected the category
 list to be built from Akahu's suggested categories; in reality only 32% of

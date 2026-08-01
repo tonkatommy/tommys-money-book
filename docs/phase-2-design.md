@@ -471,23 +471,30 @@ specialty-retail rule reporting zero matches.
 
 ## 11. Results over the real baseline
 
-Run against the live database, 01/08/2026.
+Run against the live database, 01/08/2026, after a daily sync that brought
+the total to 2,687 (the discovery report describes the 2,642-row baseline as
+it stood on 27/07).
 
 | | Transactions | |
 |---|---:|---|
-| Transfer legs paired and categorised | 806 | `categorySource = TRANSFER` |
-| Matched by a rule | 1,361 | `categorySource = RULE` |
-| Left for review | 475 | in 69 distinct keys |
-| **Total** | **2,642** | **82% categorised automatically** |
+| Transfer legs paired and categorised | 818 | `categorySource = TRANSFER` |
+| Matched by a rule | 1,382 | `categorySource = RULE` |
+| Left for review | 487 | in ~70 distinct keys |
+| **Total** | **2,687** | **82% categorised automatically** |
 
-Of the 475 remaining, 137 are the tier 2 standing-order legs waiting on
-confirmation and 228 are the `Thomas Brett` stream that was deliberately left
-for Tommy to split. The genuine long tail is about 110 transactions.
+Of those left, roughly 137 are tier 2 standing-order legs waiting on
+confirmation and 228 are the `Thomas Brett` stream deliberately left for Tommy
+to split. The genuine long tail is about 110 transactions.
 
-Tier 1 transfer detection paired **403 of 404** outgoing legs with zero
-unmatched internal legs, exactly as the discovery report predicted. The two
-excluded legs name `01-0495-0425683-00`, which isn't ours. Every stored pair
-has exactly two legs summing to zero.
+Tier 1 transfer detection paired **403 of 404** outgoing legs on the original
+baseline with zero unmatched internal legs, exactly as the discovery report
+predicted, and a further 6 on the next sync. The two excluded legs name
+`01-0495-0425683-00`, which isn't ours. All 409 stored pairs have exactly two
+legs summing to zero.
+
+The daily sync path was verified end to end against live Akahu: of 45 newly
+imported transactions, 21 were categorised on arrival and the rest went to the
+review queue.
 
 Tax tag totals:
 
