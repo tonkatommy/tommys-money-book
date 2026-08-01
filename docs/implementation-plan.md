@@ -119,13 +119,25 @@ model Account {
 
 model Category {
   id          String   @id @default(cuid())
-  name        String                // "Groceries" — list built from Akahu data in Phase 2
+  name        String                // "Groceries" — list built from real data in Phase 2
   book        Book                  // which set of books it belongs to
   kind        Kind                  // INCOME | EXPENSE | TRANSFER | OWNER
-  taxTag      TaxTag?               // RENTAL_INCOME | RENTAL_EXPENSE | BIZ_INCOME |
-                                    // BIZ_EXPENSE | HOME_OFFICE | null — drives IR3/GST reports
-  akahuNames  String[]              // Akahu category names that auto-map here
+  taxTag      TaxTag?               // RENTAL_INCOME | RENTAL_EXPENSE | BIZ_INCOME | BIZ_EXPENSE |
+                                    // HOME_OFFICE | TAXABLE_INCOME | null — drives IR3/GST reports
+  rules       CategoryRule[]
   transactions Transaction[]
+}
+
+// Added in Phase 2, replacing `Category.akahuNames`. See §6.
+model CategoryRule {
+  id          String   @id @default(cuid())
+  categoryId  String
+  field       RuleField             // AKAHU_CATEGORY | MERCHANT | DESCRIPTION
+  pattern     String                // lower-cased; normalised for DESCRIPTION
+  accountId   String?               // optional scope to one account
+  direction   RuleDirection         // IN | OUT | ANY — the sign of amountCents
+  priority    Int                   // lower wins within a tier
+  note        String?               // why this rule exists
 }
 
 model Transaction {
@@ -138,6 +150,8 @@ model Transaction {
   amountCents Int                   // integer cents — never floats for money
   notes       String?
   source      Source   @default(AKAHU)  // AKAHU | MANUAL (cash the bank never sees)
+  categorySource CategorySource?    // RULE | MANUAL | TRANSFER — the matcher never
+                                    // overwrites a category a human chose
   externalId  String?  @unique      // Akahu transaction id → dedupe on re-sync
   transferPairId String?            // links XFR-01 ↔ XFR-02 legs
   account     Account  @relation(...)
@@ -151,7 +165,10 @@ Design notes worth understanding, not just copying:
 - **`book` on both account and category** lets the database enforce the golden rule: a constraint (or app-level validation) rejects a personal category on a business account. In Excel this rule lived in your discipline; here it lives in the schema.
 - **`transferPairId`** makes the two legs of a transfer a first-class linked pair. Akahu marks many inter-account transactions with a transfer type, and matching ±amounts on the same day catch the rest — the app suggests pairs, you confirm. Unpaired transfers surface as a warning, automating the netting check.
 - **`externalId`** holds Akahu's stable transaction ID. Re-running a sync (or the baseline pull) can never double-import — the exact class of problem that has bitten the spreadsheet.
-- **`taxTag` on categories** is the bridge between a freeform category list and the IR3. You can rename, merge, and reshape categories freely; as long as the tags are right, year-end reports don't care what the categories are called.
+- **`taxTag` on categories** is the bridge between a freeform category list and the IR3. You can rename, merge, and reshape categories freely; as long as the tags are right, year-end reports don't care what the categories are called. Phase 2 added a sixth tag, `TAXABLE_INCOME`: the original five quietly assumed all personal taxable income was rental income, which left salary, the W&I benefit and $47,555 of AIA income-protection payments indistinguishable from genuinely non-taxable receipts (flatmate cost-sharing, gifts, KiwiSaver withdrawals).
+- **`CategoryRule` replaced `Category.akahuNames`** (Phase 2, 01/08/2026). The original design assumed Akahu's suggested category names could drive auto-categorisation. Against real data they cover 32% of transactions and 0% of income — Akahu's enrichment only fires on card spending — and an exact-match name list cannot express the exceptions that decide tax treatment. IAG bills three policies from one merchant and only the landlord one is a rental deduction; PayPal is the Shopify subscription in the business book and anything at all in the personal one. Rules match on description, merchant, or Akahu category, ordered by computed specificity.
+- **`categorySource` is what makes corrections stick.** A category assigned by a rule can be re-derived; one assigned by a human must not be. Without the distinction, every daily sync would re-run the matcher over hand-corrected rows and silently restore exactly the answer that was wrong — leaving books that still balanced.
+- **Reconciliation subtracts pending transactions.** The bank's reported balance includes card authorisations that haven't settled; the transaction feed contains only settled rows. Comparing one against the other gave permanent non-zero drift on any account with live card activity (found 01/08/2026: ten pending authorisations on ANZ Money Card totalling exactly the -$233.02 of drift). Pending totals are fetched and subtracted; pending rows are never imported, because their ids are unstable and their amounts change when they settle.
 - **FY is derived, not stored:** NZ FY = year of `date + 9 months`. A transaction on 15/03/2027 is FY2027; 15/04/2027 is FY2028. One SQL expression, used by every report.
 
 ---
@@ -186,6 +203,8 @@ Deliberately after the baseline, so decisions are driven by real data:
 
 Deliverable: baseline fully categorised, auto-categorisation rules live for the daily sync.
 
+**Completed 01/08/2026.** The outcome differed from the plan in one important way: the category list could not be built from Akahu's suggestions, because only 32% of transactions carry any Akahu enrichment and none of the income does. Normalising bank descriptions (stripping card numbers and per-transaction references) collapsed 1,786 uncategorised rows to 184 distinct keys, so ~140 rules cover the baseline instead. 63 categories; 82% categorised automatically — 818 transfer legs paired and 1,382 rule-matched, leaving 487 for review. Tier 1 transfer pairing turned out to be deterministic rather than heuristic: ANZ names the counterparty account in both legs, giving 403 of 404 pairs with zero unmatched. Tier 2 (standing orders, cross-book owner movements) stays manual — a real standing order collides with a real flatmate payment on the same day for the same amount 17 times across the baseline, and auto-netting the wrong one would erase income while leaving the books balanced. Full detail in `docs/phase-2-discovery.md` and `docs/phase-2-design.md`.
+
 ### Phase 3 — MVP: dashboard + transactions (3–4 weekends)
 
 - Transaction list: filter by book, account, category, date range, uncategorised; search payee/description.
@@ -209,7 +228,7 @@ Rough total: sync foundation in ~3 weekends, categorised data by ~5, MVP live ar
 - **No internet exposure.** Bind to LAN; use Tailscale for access away from home (you likely have this or WireGuard already). No port forwarding, no reverse-proxy hardening needed because there's nothing public to harden.
 - **Secrets:** Akahu tokens grant read access to every connected account. Docker secrets or a `.env` outside the repo, `chmod 600`, never committed. Rotate via the Akahu dashboard if ever in doubt.
 - **HTTPS even on LAN** — a self-signed cert or Tailscale's built-in certs; bank data shouldn't cross the wire in plaintext even at home.
-- **Backups:** nightly `pg_dump` to a separate volume/NAS, and periodically test a restore. The corrupted-tracker episodes are the argument for this; a database you back up nightly and can restore beats a spreadsheet on OneDrive.
+- **Backups:** nightly `pg_dump` to a separate volume/NAS, and periodically test a restore. The corrupted-tracker episodes are the argument for this; a database you back up nightly and can restore beats a spreadsheet on OneDrive. **Implemented 01/08/2026** as a fourth compose service: 2am NZ nightly, dumps written to `.partial` and renamed only after `pg_restore --list` reads them back, a weekly automated restore into a scratch database, retention 30 days with a floor of 7 dumps. Backups live on their own volume, not inside the one they protect. Still to do: point that volume at the NAS, since a local Docker volume survives a bad command but not a dead disk.
 - **Updates:** Watchtower or a manual monthly `docker compose pull`; Dependabot on the repo.
 
 ---
@@ -235,7 +254,11 @@ App is source of truth · Akahu is the sole data source from day one — full-hi
 
 App name: **Tommy's Money Book** (confirmed 16/07/2026).
 
-**Open questions for you:** where reports for Garreth should land (email vs folder); whether Vehicle_Logbook.xlsx eventually joins the app; how far back each bank's Akahu history actually reaches (answered in Phase 1).
+**Phase 2 decisions (01/08/2026):** flatmate contributions are cost-sharing, not taxable income · AIA payments are taxable income protection · rental income from Ray White is net of management fees, so the IR3 pack carries a warning and the gross-up mechanism is deferred to Phase 4 · BNPL repayment is the expense, split by lender · the Sovereign payments are the same Cashel St mortgage via a different provider account · Energy Solution Providers is the employer from 20/07/2026 and becomes the main income source · `akahuNames` folded into `CategoryRule`.
+
+**Open questions for you:** where reports for Garreth should land (email vs folder); whether Vehicle_Logbook.xlsx eventually joins the app; whether the AIA treatment and the Cashel St mortgage interest split need confirming with Garreth before the first IR3.
+
+**Answered:** how far back each bank's Akahu history reaches — 16/07/2025, about 12 months, not the hoped-for 24 (Phase 1). FY2027 is therefore fully covered and the first app-generated IR3 is viable; FY2026 still needs the Excel archive.
 
 ---
 

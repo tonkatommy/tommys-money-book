@@ -50,6 +50,7 @@ Design decisions worth noting:
 - **Categorisation is rules, not hand-sorting.** Bank descriptions carry a per-transaction reference that makes every row unique; normalising them away collapsed 1,786 uncategorised transactions to 184 distinct patterns. ~140 rules now categorise 82% of the baseline automatically.
 - **A human decision is never overwritten.** `categorySource` marks whether a category came from a rule or a person. The matcher skips the second kind, so a correction survives every rule change and every daily sync — otherwise the sync would quietly restore precisely the answer that was wrong, and the books would still balance.
 - **Reconciliation needs an opening balance.** Akahu only reaches back about two years, so "sum of stored transactions equals the bank balance" can never hold on its own. The balance that predates our earliest transaction is derived once at baseline; drift is measured against that from then on.
+- **And it needs pending transactions.** The bank's reported balance includes card authorisations that haven't settled; the transaction feed contains only settled rows. Comparing one against the other gives permanent drift on any account with live card activity — so pending totals are fetched and subtracted. The pending rows themselves are never imported: their ids are unstable and their amounts change on settlement, which would poison `externalId` dedupe.
 - **The incremental sync window looks backwards.** Each run re-reads the last seven days rather than starting where the previous run finished — banks post transactions late, and anchoring on run time would skip them permanently. Dedupe makes the overlap free.
 - **NZ financial year (01/04–31/03) is derived from the transaction date**, not stored — one SQL expression used by every report.
 
@@ -257,8 +258,14 @@ Akahu's enrichment only fires on card spending. Descriptions had to carry the
 work instead. [docs/phase-2-discovery.md](docs/phase-2-discovery.md) has the
 evidence, [docs/phase-2-design.md](docs/phase-2-design.md) the decisions.
 
+Reconciliation is clean: all 11 accounts sit at zero drift. Getting there meant
+fixing a real bug — the check compared settled transactions against a bank
+balance that already included unsettled card authorisations, so any account
+with live card activity showed permanent drift. A warning that is always on is
+a warning nobody reads, and it would have buried a genuinely missing
+transaction in noise.
+
 Next up is Phase 3 — the transaction list and dashboard, which is the go-live
-point. **Before that: nightly `pg_dump`.** Plan §7 has always wanted it and
-there is now a year of real financial data with nothing backing it up.
+point.
 
 Built in the open as a learning and portfolio project.
