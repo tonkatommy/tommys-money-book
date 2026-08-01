@@ -69,19 +69,59 @@ void runScript("categories:seed", async () => {
     return;
   }
 
-  console.log("");
-  console.log(
-    "Rules matching nothing. Usually a pattern written against the raw " +
-      "description instead of the normalised one, a merchant name spelled " +
-      "differently from Akahu's, or a rule permanently shadowed by a " +
-      "narrower one. A few are legitimate — categories that exist because a " +
-      "report needs the line, not because the money has moved yet:",
+  // Three outcomes, and only one of them is a bug.
+  const suspicious = dead.filter((rule) =>
+    rule.shadowedBy.some((shadow) => !shadow.sameCategory),
   );
-  console.log("");
-  for (const rule of dead) {
+  const redundant = dead.filter(
+    (rule) =>
+      rule.shadowedBy.length > 0 &&
+      rule.shadowedBy.every((shadow) => shadow.sameCategory),
+  );
+  const unused = dead.filter((rule) => rule.shadowedBy.length === 0);
+
+  const describe = (rule: (typeof dead)[number]): string =>
+    `  ${rule.book.slice(0, 4).padEnd(4)} ${rule.field.padEnd(15)} ` +
+    `${rule.pattern.padEnd(38)} → ${rule.categoryName}`;
+
+  if (suspicious.length > 0) {
+    console.log("");
     console.log(
-      `  ${rule.book.slice(0, 4).padEnd(4)} ${rule.field.padEnd(15)} ` +
-        `${rule.pattern.padEnd(40)} → ${rule.categoryName}`,
+      "SHADOWED BY A DIFFERENT CATEGORY — look at these. One of the two " +
+        "patterns is wrong, and transactions are landing somewhere nobody " +
+        "chose:",
     );
+    console.log("");
+    for (const rule of suspicious) {
+      console.log(describe(rule));
+      for (const shadow of rule.shadowedBy.filter((s) => !s.sameCategory)) {
+        console.log(
+          `         beaten by "${shadow.pattern}" → ${shadow.categoryName}`,
+        );
+      }
+    }
+  }
+
+  if (redundant.length > 0) {
+    console.log("");
+    console.log(
+      "Redundant, but harmless — a more specific rule already sends these " +
+        "to the same category. Worth keeping as a safety net if the bank " +
+        "ever changes its description format:",
+    );
+    console.log("");
+    for (const rule of redundant) console.log(describe(rule));
+  }
+
+  if (unused.length > 0) {
+    console.log("");
+    console.log(
+      "Match nothing at all. Either a typo — a pattern written against the " +
+        "raw description instead of the normalised one, or a merchant name " +
+        "spelled differently from Akahu's — or a category that exists " +
+        "because a report needs the line, not because the money has moved:",
+    );
+    console.log("");
+    for (const rule of unused) console.log(describe(rule));
   }
 });

@@ -78,13 +78,16 @@ export async function detectTransfers(
 
   const { pairs, unmatchedOut, unmatchedIn } = pairTransferLegs(resolved);
 
-  const external = unmatchedOut.filter(
-    (leg) => leg.counterpartyAccountId === null,
+  // "External" means the description names an account we don't hold, so
+  // there is no second leg to find and never will be. That applies in both
+  // directions — money going out to someone else's account, and money
+  // arriving from one — so both lists have to be split the same way, or an
+  // incoming payment from outside reads as a detection failure.
+  const leftOver = [...unmatchedOut, ...unmatchedIn];
+  const external = leftOver.filter((leg) => leg.counterpartyAccountId === null);
+  const genuinelyUnmatched = leftOver.filter(
+    (leg) => leg.counterpartyAccountId !== null,
   );
-  const genuinelyUnmatched = [
-    ...unmatchedOut.filter((leg) => leg.counterpartyAccountId !== null),
-    ...unmatchedIn,
-  ];
 
   let written = 0;
 

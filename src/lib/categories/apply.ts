@@ -7,6 +7,7 @@
 
 import type { Book, PrismaClient } from "@/generated/prisma/client";
 import {
+  matchAllRules,
   matchTransaction,
   sortRules,
   type MatchableRule,
@@ -215,6 +216,15 @@ export type RuleCoverage = {
   field: string;
   pattern: string;
   matches: number;
+  /**
+   * For a rule that never wins: which rules beat it, and whether they route
+   * to the same category.
+   *
+   * Same category means the rule is a redundant safety net — harmless, and
+   * often deliberate. A *different* category means one of the two patterns is
+   * wrong, and transactions are landing somewhere nobody intended.
+   */
+  shadowedBy: { pattern: string; categoryName: string; sameCategory: boolean }[];
 };
 
 /**
@@ -242,6 +252,8 @@ export async function ruleCoverage(
   const metaById = new Map(stored.map((r) => [r.id, r]));
 
   const wins = new Map<string, number>();
+  // loser rule id -> winning rule ids that beat it on at least one row
+  const shadows = new Map<string, Set<string>>();
 
   let cursor: string | undefined;
 
@@ -265,25 +277,46 @@ export async function ruleCoverage(
     cursor = page[page.length - 1]!.id;
 
     for (const transaction of page) {
-      const rule = matchTransaction(
+      const matching = matchAllRules(
         transaction,
         transaction.account.book,
         rules,
       );
-      if (rule) wins.set(rule.id, (wins.get(rule.id) ?? 0) + 1);
+      if (matching.length === 0) continue;
+
+      const winner = matching[0]!;
+      wins.set(winner.id, (wins.get(winner.id) ?? 0) + 1);
+
+      for (const loser of matching.slice(1)) {
+        const set = shadows.get(loser.id) ?? new Set<string>();
+        set.add(winner.id);
+        shadows.set(loser.id, set);
+      }
     }
 
     if (page.length < PAGE_SIZE) break;
   }
 
   return stored
-    .map((rule) => ({
-      ruleId: rule.id,
-      categoryName: metaById.get(rule.id)?.category.name ?? "(unknown)",
-      book: rule.category.book,
-      field: rule.field,
-      pattern: rule.pattern,
-      matches: wins.get(rule.id) ?? 0,
-    }))
+    .map((rule) => {
+      const categoryName = metaById.get(rule.id)?.category.name ?? "(unknown)";
+
+      return {
+        ruleId: rule.id,
+        categoryName,
+        book: rule.category.book,
+        field: rule.field,
+        pattern: rule.pattern,
+        matches: wins.get(rule.id) ?? 0,
+        shadowedBy: [...(shadows.get(rule.id) ?? [])].map((winnerId) => {
+          const winner = metaById.get(winnerId);
+          return {
+            pattern: winner?.pattern ?? "(unknown)",
+            categoryName: winner?.category.name ?? "(unknown)",
+            sameCategory: winner?.category.name === categoryName,
+          };
+        }),
+      };
+    })
     .sort((a, b) => a.matches - b.matches || a.pattern.localeCompare(b.pattern));
 }

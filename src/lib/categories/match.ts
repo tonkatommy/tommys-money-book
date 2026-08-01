@@ -152,3 +152,34 @@ export function matchTransaction(
 
   return null;
 }
+
+/**
+ * Every rule that matches, in precedence order — the winner first.
+ *
+ * Used only by the coverage check, and it earns its place: knowing *which*
+ * rule beat a rule that never wins is the difference between "this is a
+ * harmless safety net pointing at the same category" and "this pattern is
+ * too loose and is stealing transactions from somewhere else".
+ *
+ * The first version of the rule set had `tommy tinker` as a description
+ * pattern for owner contributions. It quietly swallowed
+ * "Nz Safety Blackwoods Tommy Tinker P750800" — a purchase of safety gear —
+ * and the only visible symptom was an unrelated rule reporting zero matches.
+ */
+export function matchAllRules(
+  transaction: MatchableTransaction,
+  accountBook: Book | null,
+  rules: readonly MatchableRule[],
+): MatchableRule[] {
+  if (accountBook === null) return [];
+
+  const normalised = normaliseDescription(transaction.description);
+
+  return rules.filter(
+    (rule) =>
+      rule.categoryBook === accountBook &&
+      (rule.accountId === null || rule.accountId === transaction.accountId) &&
+      directionAllows(rule.direction, transaction.amountCents) &&
+      fieldMatches(rule, transaction, normalised),
+  );
+}

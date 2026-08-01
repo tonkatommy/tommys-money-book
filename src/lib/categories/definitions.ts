@@ -42,12 +42,6 @@ export type RuleDefinition = {
   accountName?: string;
   priority?: number;
   note?: string;
-  /**
-   * Set when a rule is expected to match nothing in the current baseline —
-   * a category that exists because a report needs it, not because the money
-   * has moved yet. Without this, `--verify` would flag it as a typo.
-   */
-  expectNoBaselineRows?: boolean;
 };
 
 export type CategoryDefinition = {
@@ -702,7 +696,19 @@ export const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
       "The personal leg of money put into Tommy Tinkers. OWNER rather than " +
       "TRANSFER because it crosses the book boundary — it must not net to " +
       "zero inside the personal book, and it is not business income either.",
-    rules: [{ field: D, pattern: "tommy tinker", direction: "OUT" }],
+    rules: [
+      {
+        field: D,
+        pattern: "tommy tinkers nz",
+        direction: "OUT",
+        note:
+          "The full business name, not 'tommy tinker'. The shorter pattern " +
+          "also matched 'Nz Safety Blackwoods Tommy Tinker P750800' — a " +
+          "purchase of safety gear with the business name in the payment " +
+          "reference — and filed it as capital introduced. Found by " +
+          "`categories:seed --verify`, which is what that check is for.",
+      },
+    ],
   },
 
   // ===========================================================================
