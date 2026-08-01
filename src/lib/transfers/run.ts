@@ -224,11 +224,11 @@ export async function writePair(
       where: { id: transactionId },
       data: {
         transferPairId,
+        categorySource: "TRANSFER",
+        categorisedAt,
         ...(category
           ? {
               categoryId: category.id,
-              categorySource: "TRANSFER",
-              categorisedAt,
             }
           : {}),
       },
