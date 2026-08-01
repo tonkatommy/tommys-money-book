@@ -9,8 +9,14 @@
 import { runScript } from "./_run";
 import { parseArgs } from "./_args";
 import { prisma } from "@/lib/prisma";
+import { formatNZD } from "@/lib/money";
 import { seedCategories } from "@/lib/categories/seed";
 import { ruleCoverage } from "@/lib/categories/apply";
+import {
+  findBookMismatches,
+  rollingBusinessTurnoverCents,
+  taxTagTotals,
+} from "@/lib/categories/verify";
 
 void runScript("categories:seed", async () => {
   const args = parseArgs(process.argv.slice(2));
@@ -124,4 +130,63 @@ void runScript("categories:seed", async () => {
     console.log("");
     for (const rule of unused) console.log(describe(rule));
   }
+
+  await reportBookConsistency();
+  await reportTaxCoverage();
 });
+
+/** The golden rule, verified against what's stored rather than assumed. */
+async function reportBookConsistency(): Promise<void> {
+  const mismatches = await findBookMismatches(prisma);
+
+  console.log("");
+  if (mismatches.length === 0) {
+    console.log(
+      "Book consistency: every categorised transaction sits in a category " +
+        "from its own book.",
+    );
+    return;
+  }
+
+  console.log(
+    `BOOK VIOLATIONS — ${mismatches.length}. Personal and business have ` +
+      `mixed, which is the one thing this schema exists to prevent:`,
+  );
+  for (const mismatch of mismatches.slice(0, 20)) {
+    console.log(
+      `  ${mismatch.date.toISOString().slice(0, 10)} ` +
+        `${mismatch.accountName} (${mismatch.accountBook}) → ` +
+        `${mismatch.categoryName} (${mismatch.categoryBook})`,
+    );
+  }
+}
+
+/** The four things plan §3 says the category list must be able to answer. */
+async function reportTaxCoverage(): Promise<void> {
+  const totals = await taxTagTotals(prisma);
+  const turnover = await rollingBusinessTurnoverCents(prisma);
+
+  console.log("");
+  console.log("Tax tag coverage:");
+  console.log("");
+  for (const total of totals) {
+    console.log(
+      `  ${(total.taxTag ?? "(untagged)").padEnd(16)} ` +
+        `${String(total.transactions).padStart(5)} txns  ` +
+        `${formatNZD(total.netCents).padStart(14)}`,
+    );
+  }
+
+  console.log("");
+  console.log(
+    `GST monitor: rolling 12-month turnover ${formatNZD(turnover.netCents)} ` +
+      `from ${turnover.transactions} sales ` +
+      `(${turnover.from.toISOString().slice(0, 10)} → ` +
+      `${turnover.to.toISOString().slice(0, 10)}), against a $60,000 ` +
+      `registration threshold.`,
+  );
+  console.log(
+    "  BIZ_INCOME only — owner contributions are an OWNER category and are " +
+      "correctly excluded.",
+  );
+}

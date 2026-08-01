@@ -169,46 +169,70 @@ This is pure and testable, and it is the reason 1,786 rows become 184 keys.
 
 ## 5. Match precedence
 
-First match wins. Within a tier, lower `priority` wins; ties break on rule id
-for determinism.
+First match wins, and the order is **computed from the rule**, not declared.
+Specificity is `fieldRank × 10 + (scoped to an account ? 0 : 2) + (scoped to a
+direction ? 0 : 1)`, lower being more specific, with `priority` and then rule
+id breaking ties.
 
-| Tier | Rule shape | Why it's this specific |
-|---|---|---|
-| 1 | `DESCRIPTION` + `accountId` + `direction` | Separates the same text in different books |
-| 2 | `DESCRIPTION` + one of account/direction | |
-| 3 | `DESCRIPTION`, unscoped | Carries the income categories Akahu can't see |
-| 4 | `MERCHANT` | 118 names, all spending |
-| 5 | `AKAHU_CATEGORY` | 50 names, the broad fallback |
+| Field | Rank | What it knows |
+|---|---:|---|
+| `DESCRIPTION` | 0 | The raw bank text. Which IAG policy, which PayPal charge, which Blue Fern bill. |
+| `MERCHANT` | 1 | Who was paid. Right about identity, silent about purpose. |
+| `AKAHU_CATEGORY` | 2 | What kind of thing it was. Broadest, and most often nearly-right. |
+
+Computing it rather than declaring it means adding a rule can't accidentally
+outrank a narrower one just because it was added later. The `× 10` matters
+too: it guarantees a fully scoped `AKAHU_CATEGORY` rule still loses to a
+completely unscoped `DESCRIPTION` one, rather than scope quietly promoting a
+rule past another field's tier.
 
 Worked example — `IAG New Zealand Limi State Insura # Lans#`:
 
-- Tier 3 `DESCRIPTION` contains `state insura` + `lans` → `Rental — Insurance` ✅
-- would otherwise fall to tier 4 `MERCHANT = IAG` → `Insurance — Motor` ✗
+- `DESCRIPTION` contains `state insura # lans` → `Rental — Insurance` ✅
+- would otherwise fall to `MERCHANT = IAG` → `Insurance — Motor` ✗
 
-Worked example — `PAYPAL *SHOPIFYCOMM 6312 ...`:
+**Book scoping is implicit, and it turned out to be enough.** The design
+assumed PayPal would need explicit `accountId` scoping to mean two different
+things. It doesn't: the matcher refuses to assign a category from a different
+book than the transaction's account, so a rule on a BUSINESS category can
+never see a PERSONAL transaction. `PAYPAL *SHOPIFYCOMM` → business
+`Platform & Subscription Fees`, and personal PayPal falls to
+`MERCHANT = PayPal` → `Household & General Retail`, with no scoping at all.
 
-- Tier 1 `DESCRIPTION` contains `paypal *shopifycomm`, scoped to the BNZ
-  account, direction OUT → `Platform & Subscription Fees` (business) ✅
-- personal PayPal rows have no such rule and fall to tier 4
-  `MERCHANT = PayPal` → `Household & General Retail`
+`accountId` scoping is kept on `CategoryRule` because a second business
+account would need it, but nothing in the current rule set uses it. What does
+get used is `direction`: the same payee is a home-office power cost on the way
+out and a refund on the way in.
 
 A transaction that matches nothing keeps `categoryId = null` and appears in the
-review queue. Null is honest; a `Uncategorised` catch-all category would hide
+review queue. Null is honest; an `Uncategorised` catch-all category would hide
 the problem inside a legitimate-looking bucket.
 
-**Book safety:** the matcher refuses to assign a category whose `book` differs
-from the transaction's account `book`. This is checked in code and asserted in
-tests — it's the golden rule from plan §5, and a mis-scoped rule is the most
-likely way to break it.
+**Book safety** is enforced in the matcher rather than by each caller, asserted
+in unit tests, and re-checked against stored data by
+`categories:seed --verify`. The bulk re-categoriser has its own copy of the
+check, because it's the one path that bypasses the matcher entirely.
 
 ---
 
 ## 6. The category list
 
-55 categories. Every one is justified by rows in the baseline except
-`Owner Drawings`, `Rental — Repairs & Maintenance` and
-`Rental — Management Fees`, which exist because the reports need them and their
-absence would be a silent gap rather than an empty row.
+63 categories as built (the design sketch said 55; the extra ones are listed
+below). Every one is justified by rows in the baseline except `Owner
+Drawings`, `Rental — Repairs & Maintenance`, `Rental — Management Fees` and
+the business `Internal Transfer`, which exist because the reports need them
+and their absence would be a silent gap rather than an empty row.
+
+Two changes from the sketch, both made while writing the rules:
+
+- **`Insurance Claims & Refunds` became `Refunds & Claims`.** The bucket also
+  has to hold a Contact Energy overpayment and a Spark rebate, which aren't
+  insurance. The narrower name would have quietly encouraged filing them
+  somewhere worse.
+- **`Cash Withdrawals` added.** $3,870 of ATM cash across 16 withdrawals.
+  Where it went is genuinely unknowable from a bank feed, so it gets its own
+  category rather than being guessed into one — and it's exactly what the
+  `MANUAL` transaction source exists for later.
 
 ### PERSONAL — income
 
@@ -410,27 +434,77 @@ Two Phase 1 defects get fixed here because this change touches the same code:
 
 ## 10. Testing
 
-Unit (pure, no database):
+Unit tests (pure, no database) cover:
 
-- `normaliseDescription` — card numbers, digit runs, whitespace, idempotence
-- rule precedence — the IAG three-policy case and the PayPal two-book case,
-  proving the exact tier-1-beats-tier-4 outcome
-- book safety — a rule pointing at a category in the wrong book is rejected
-- transfer tier 1 — reciprocal match, external account excluded, label
-  mismatch tolerated, ambiguous groups resolved deterministically
-- the pair invariant — legs sum to zero, exactly two legs
+- `normaliseDescription` — card numbers, digit runs, whitespace, idempotence,
+  and specifically that it does *not* destroy the IAG policy suffix
+- rule precedence — the IAG three-policy case, the PayPal two-book case, the
+  refund-vs-spend direction case, and that scope can't promote a rule past
+  another field's tier
+- book safety — wrong-book rules rejected, unassigned accounts match nothing
+- determinism — equally specific rules resolve identically regardless of input
+  order
+- transfer tier 1 — reciprocal match required, external account excluded,
+  label mismatch tolerated, interchangeable groups resolved stably, no
+  incoming leg claimed twice
+- tier 2 — the flatmate collision surfaces as contested rather than resolved
 
-Integration (against the real database, read-only assertions):
+Checks against the real database live in `categories:seed --verify` rather
+than in the test suite, because `npm test` has to pass inside a Docker build
+where there is no database. It reports:
 
-- every seeded rule matches at least one baseline row, or is explicitly marked
-  `note: "no baseline rows"` — a rule that matches nothing is a typo
-- no baseline transaction matches two rules that resolve to different books
-- after `categories:apply`, `BIZ_INCOME` for the trailing 12 months is
-  $982.84 — the GST turnover number, excluding owner contributions
+- **rule coverage**, split three ways — matching nothing at all (usually a
+  typo), shadowed by a rule pointing at the *same* category (a harmless safety
+  net), and shadowed by a rule pointing at a *different* one (a bug).
+- **book consistency** — every categorised transaction sits in a category from
+  its own book, verified against stored data rather than trusted.
+- **tax tag totals and the rolling 12-month GST turnover.**
+
+The three-way split of rule coverage was not in the original design and was
+added because the two-way version hid a real defect: the description pattern
+`tommy tinker` was swallowing `Nz Safety Blackwoods Tommy Tinker P750800` — a
+purchase of safety gear with the business name in the payment reference — and
+filing it as capital introduced. The only symptom was an unrelated
+specialty-retail rule reporting zero matches.
 
 ---
 
-## 11. Not in scope
+## 11. Results over the real baseline
+
+Run against the live database, 01/08/2026.
+
+| | Transactions | |
+|---|---:|---|
+| Transfer legs paired and categorised | 806 | `categorySource = TRANSFER` |
+| Matched by a rule | 1,361 | `categorySource = RULE` |
+| Left for review | 475 | in 69 distinct keys |
+| **Total** | **2,642** | **82% categorised automatically** |
+
+Of the 475 remaining, 137 are the tier 2 standing-order legs waiting on
+confirmation and 228 are the `Thomas Brett` stream that was deliberately left
+for Tommy to split. The genuine long tail is about 110 transactions.
+
+Tier 1 transfer detection paired **403 of 404** outgoing legs with zero
+unmatched internal legs, exactly as the discovery report predicted. The two
+excluded legs name `01-0495-0425683-00`, which isn't ours. Every stored pair
+has exactly two legs summing to zero.
+
+Tax tag totals:
+
+| Tag | Transactions | Net |
+|---|---:|---:|
+| RENTAL_INCOME | 24 | $19,272.78 |
+| RENTAL_EXPENSE | 87 | -$32,662.19 |
+| BIZ_INCOME | 11 | $982.84 |
+| BIZ_EXPENSE | 57 | -$2,395.55 |
+| HOME_OFFICE | 97 | -$46,008.99 |
+| TAXABLE_INCOME | 34 | $55,266.64 |
+
+**Rolling 12-month business turnover: $982.84** against the $60,000 GST
+threshold — the number the design predicted, and $1,630 lower than it would
+have been if owner contributions were treated as income.
+
+## 12. Not in scope
 
 - Any UI. Phase 3.
 - The rental gross-up mechanism. Phase 4, per decision 3.
