@@ -18,14 +18,16 @@ log() { echo "[backup] $*"; }
 # `docker compose exec backup /opt/backup/backup.sh` worked perfectly, which
 # is a maddening thing to debug. So: freeze the environment to a file now, and
 # have each cron job source it.
+escape_squotes() { printf "%s" "$1" | sed "s/'/'\\''/g"; }
+
 {
-  echo "export POSTGRES_USER='${POSTGRES_USER}'"
-  echo "export POSTGRES_DB='${POSTGRES_DB}'"
-  echo "export PGPASSWORD='${PGPASSWORD}'"
-  echo "export PGHOST='${PGHOST:-db}'"
-  echo "export BACKUP_DIR='${BACKUP_DIR:-/backups}'"
-  echo "export BACKUP_RETAIN_DAYS='${BACKUP_RETAIN_DAYS:-30}'"
-  echo "export BACKUP_MIN_KEEP='${BACKUP_MIN_KEEP:-7}'"
+  echo "export POSTGRES_USER='$(escape_squotes "${POSTGRES_USER}")'"
+  echo "export POSTGRES_DB='$(escape_squotes "${POSTGRES_DB}")'"
+  echo "export PGPASSWORD='$(escape_squotes "${PGPASSWORD}")'"
+  echo "export PGHOST='$(escape_squotes "${PGHOST:-db}")'"
+  echo "export BACKUP_DIR='$(escape_squotes "${BACKUP_DIR:-/backups}")'"
+  echo "export BACKUP_RETAIN_DAYS='$(escape_squotes "${BACKUP_RETAIN_DAYS:-30}")'"
+  echo "export BACKUP_MIN_KEEP='$(escape_squotes "${BACKUP_MIN_KEEP:-7}")'"
 } > /etc/backup.env
 chmod 600 /etc/backup.env
 
