@@ -7,8 +7,7 @@
 // because a rule matching nothing is a typo nobody would otherwise notice.
 //
 // How to change it: edit here, run `npm run categories:seed`, then
-// `npm run categories:apply --dry-run`. Seeding is idempotent — categories are
-// upserted by (name, book) and a category's rules are replaced wholesale, so
+// `npm run categories:apply` (dry by default) to preview changes. Seeding is idempotent — categories are
 // deleting a rule here deletes it from the database. A category that already
 // has transactions is never deleted.
 //
