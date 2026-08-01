@@ -39,6 +39,47 @@ enum TaxTag {
   BIZ_INCOME
   BIZ_EXPENSE
   HOME_OFFICE
+
+  // Personal income that belongs on the IR3 but is neither rental nor
+  // business: salary, the W&I benefit, AIA income-protection payments.
+  //
+  // Added in Phase 2 because the original five tags quietly assumed all
+  // personal taxable income was rental income. It isn't — and without this
+  // tag $47,555 of AIA payments would be indistinguishable from the
+  // genuinely non-taxable receipts (flatmate cost-sharing, gifts, KiwiSaver
+  // withdrawals), which would make it the largest thing a year-end report
+  // omitted without ever saying so.
+  TAXABLE_INCOME
+}
+
+// Which field of a transaction a CategoryRule looks at.
+//
+// The order matters and is deliberate: DESCRIPTION beats MERCHANT beats
+// AKAHU_CATEGORY, because that is the order of decreasing specificity in the
+// real data. See src/lib/categories/match.ts.
+enum RuleField {
+  AKAHU_CATEGORY // exact match on Transaction.akahuCategoryName
+  MERCHANT // exact match on Transaction.merchantName
+  DESCRIPTION // substring match on the *normalised* description
+}
+
+// Restricts a rule to money coming in or going out. The sign of amountCents
+// is often the only thing separating two meanings of the same payee — a
+// refund from a purchase, a loan repaid from a loan made.
+enum RuleDirection {
+  IN // amountCents > 0
+  OUT // amountCents < 0
+  ANY
+}
+
+// How a transaction came to have its category. The whole point of this enum
+// is MANUAL: the matcher must never overwrite a decision a human made, or
+// every daily sync would silently undo exactly the corrections that were
+// needed — and the books would still look consistent afterwards.
+enum CategorySource {
+  RULE // assigned by the auto-categorisation matcher
+  MANUAL // assigned by a human; the matcher leaves it alone
+  TRANSFER // assigned as a side effect of confirming a transfer pair
 }
 
 // Where a transaction came from. AKAHU rows carry an externalId for dedupe;
@@ -74,8 +115,8 @@ enum SyncStatus {
 }
 
 model Account {
-  id   String  @id @default(cuid())
-  name String  @unique // "ANZ Everyday", "BNZ Tommy Tinkers", ...
+  id   String @id @default(cuid())
+  name String @unique // "ANZ Everyday", "BNZ Tommy Tinkers", ...
 
   // Nullable on purpose. A freshly discovered Akahu account genuinely doesn't
   // know which set of books it belongs to yet — pretending it's PERSONAL by
@@ -115,8 +156,9 @@ model Account {
   // distinction matters.
   lastTransactionAt DateTime?
 
-  transactions Transaction[]
-  syncResults  AccountSyncResult[]
+  transactions  Transaction[]
+  syncResults   AccountSyncResult[]
+  categoryRules CategoryRule[]
 }
 
 model Category {
@@ -126,15 +168,59 @@ model Category {
   kind   Kind
   taxTag TaxTag?
 
-  // Akahu category names that auto-map to this category during sync.
-  // Postgres arrays are fine here — this is config data, not relational data.
-  akahuNames String[]
-
   transactions Transaction[]
+  rules        CategoryRule[]
 
   // Same category name can exist in both books ("Software" personal vs
   // business), but not twice within one book.
   @@unique([name, book])
+}
+
+// How a transaction finds its category automatically.
+//
+// This replaces the `Category.akahuNames String[]` the implementation plan
+// specified. Phase 2's discovery report over the real baseline killed the
+// assumption behind that design: only 32% of transactions carry an Akahu
+// category at all, *none* of the income does (Akahu's enrichment only fires
+// on card spending), and an exact list of names cannot express the
+// exceptions that decide tax treatment. Two examples that forced the change:
+//
+//   - "IAG" is three separate policies — motor, home, and landlord — and
+//     only the landlord one is a deductible rental expense. They differ by a
+//     suffix in the description, not by merchant or category.
+//   - "PayPal" is the Shopify subscription on the business account and
+//     anything at all on the personal ones.
+//
+// So Akahu's names became one rule type among three rather than the whole
+// mechanism, and rules gained the scoping and precedence needed to say
+// "except when...".
+model CategoryRule {
+  id         String @id @default(cuid())
+  categoryId String
+
+  field   RuleField
+  pattern String // stored lower-cased; already normalised for DESCRIPTION
+
+  // Optional scope. `accountId` is what lets the same text mean different
+  // things in different books; `direction` separates a refund from a spend.
+  accountId String?
+  direction RuleDirection @default(ANY)
+
+  // Lower numbers win within a tier. Explicit rather than derived from
+  // pattern length, so a one-off exception can be forced above a general
+  // rule without anyone having to reverse-engineer why it sorts that way.
+  priority Int @default(100)
+
+  // Why this rule exists. Six months from now the pattern will be cryptic
+  // and the reasoning will be gone; a rule nobody understands is a rule
+  // nobody dares change.
+  note String?
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  account  Account? @relation(fields: [accountId], references: [id])
+
+  @@index([field, pattern])
+  @@index([categoryId])
 }
 
 model Transaction {
@@ -151,6 +237,15 @@ model Transaction {
 
   notes  String?
   source Source  @default(AKAHU)
+
+  // --- How the category got there --------------------------------------------
+  // Null means uncategorised, which is also what puts a row in the review
+  // queue. MANUAL is load-bearing: `categories:apply` skips those rows, so a
+  // correction made by hand survives every future rule change and every
+  // daily sync. Without it the matcher would re-run over corrected rows and
+  // quietly restore the wrong answer.
+  categorySource CategorySource?
+  categorisedAt  DateTime?
 
   // Akahu's stable transaction ID. The @unique means a re-run sync can never
   // double-import a transaction — the DB itself refuses.
