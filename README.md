@@ -132,6 +132,14 @@ npm run categories:apply -- --confirm
 | `npm run transfers:detect` | Pairs ANZ internal transfers automatically (deterministic — both legs name each other), lists everything else as suggestions. `--confirm` writes the automatic tier. |
 | `npm run transfers:confirm` | Confirm a suggestion: `--out <id> --in <id>`, or `--confidence HIGH` for every uncontested one at that level. |
 
+**Backups**
+
+| Command | What it does |
+|---|---|
+| `npm run db:backup` | Take one now. The nightly job runs the same script. |
+| `npm run db:backup:verify` | Restore the newest dump into a scratch database, count the rows, drop it. Never touches the live database. |
+| `npm run db:backup:list` | What's currently retained. |
+
 **Checks**
 
 | Command | What it does |
@@ -175,11 +183,55 @@ Three services: the Next.js app on :3000, Postgres, and the sync worker
 (no exposed port — it only talks to Postgres and Akahu). Migrations are never
 run automatically; apply them with `npm run db:migrate`.
 
+## Backups
+
+A fourth container runs `pg_dump` nightly at 2am NZ and a restore test at
+3:30am Sunday. `docker compose logs backup` is the whole history.
+
+What's being protected is worth being precise about, because it sets the bar.
+The bank transactions are re-fetchable — Akahu hands them back on a fresh
+baseline pull. What is *not* recoverable is everything a human decided: which
+category each transaction is in, which transfers were confirmed as pairs,
+which book each account belongs to. That's hours of judgement stored nowhere
+else.
+
+How it avoids the usual ways backups fail:
+
+- **A partial dump is never mistaken for a good one.** Dumps are written to
+  `.partial` and renamed only after they verify. A rename within a filesystem
+  is atomic, so a crash mid-dump leaves obvious junk rather than a truncated
+  file that looks fine until you need it.
+- **Every dump is read back.** `pg_restore --list` runs against it immediately;
+  a dump that can't be listed is deleted and the run fails.
+- **Restores are tested weekly, not assumed.** The newest dump is restored into
+  a throwaway database, its rows counted, and the database dropped. An empty
+  restore fails the check — a successful restore of nothing is the failure this
+  is looking for.
+- **A suddenly tiny dump is flagged.** Less than half the previous size warns
+  loudly. That's what a dump of an empty database looks like.
+- **Pruning can't empty the directory.** Retention is 30 days, but the newest 7
+  are kept regardless, so a container starting after a long outage can't delete
+  everything before writing its first new backup.
+- **Backups live on their own volume.** `db-backups`, not inside `db-data` — a
+  backup stored in the volume it protects dies with it.
+
+Restoring *over* the live database is deliberately not scripted. It's a slow,
+deliberate decision, so the command should be in front of you when you make it:
+
+```bash
+docker compose exec backup pg_restore --username=moneybook --dbname=moneybook --clean --if-exists --no-owner --exit-on-error /backups/moneybook-YYYYMMDDThhmmssZ.dump
+```
+
+Stop the app and worker first, or they'll write into a half-restored database.
+
+**Still to do:** `db-backups` is a local Docker volume, which survives a bad
+command but not a dead disk. Point it at a NAS bind mount to fix that.
+
 ## Security
 
 - Read-only Akahu tokens stored as Docker secrets — never in the repo or database
 - LAN-only binding, remote access via Tailscale, HTTPS even on the local network
-- Nightly database backups to a separate volume, restore-tested
+- Nightly database backups on a separate volume, restore-tested weekly
 
 ## Status
 

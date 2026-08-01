@@ -24,6 +24,9 @@
     "categories:recat": "tsx src/scripts/categories-recat.ts",
     "transfers:detect": "tsx src/scripts/transfers-detect.ts",
     "transfers:confirm": "tsx src/scripts/transfers-confirm.ts",
+    "db:backup": "docker compose exec -T backup /opt/backup/backup.sh",
+    "db:backup:verify": "docker compose exec -T backup /opt/backup/verify-restore.sh",
+    "db:backup:list": "docker compose exec -T backup sh -c \"ls -lh /backups\"",
     "worker": "tsx src/worker/index.ts"
   },
   "dependencies": {
