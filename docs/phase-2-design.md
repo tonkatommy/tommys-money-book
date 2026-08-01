@@ -403,11 +403,11 @@ existing `src/scripts/_run.ts` pattern.
 |---|---|
 | `npm run categories:discover` | Regenerates the discovery report from the current database. Read-only. Repeatable, not a one-off — it's how the next re-shaping conversation starts. |
 | `npm run categories:seed` | Creates/updates categories and rules from `src/lib/categories/definitions.ts`. Idempotent: upsert by `(name, book)`, rules replaced wholesale per category. Never deletes a category that has transactions. |
-| `npm run categories:apply` | Runs the matcher. `--dry-run` prints the mapping without writing. Skips `MANUAL` rows unless `--force`. `--uncategorised` (default) or `--all`. |
+| `npm run categories:apply` | Runs the matcher. Dry by default; pass `--confirm` to write. Default scope is uncategorised rows; add `--all` to include already-categorised, and `--force` (with `--all`) to overwrite MANUAL/TRANSFER. |
 | `npm run categories:review` | The review queue: uncategorised rows grouped by normalised key, ranked by count and dollar volume, with account and direction. 166 `Thomas Brett` rows are one line. |
 | `npm run categories:recat` | Bulk re-categorisation. `--from <cat> --to <cat>`, or `--match <key> --to <cat>`, optionally `--account`/`--book`/`--direction`. Prints the affected count and total and requires `--confirm` to write. Sets `categorySource = MANUAL`. |
-| `npm run transfers:detect` | Auto-confirms tier 1; prints tier 2 suggestions with ids. `--dry-run` supported. |
-| `npm run transfers:confirm` | Confirms suggestions by id, or `--all-tier2`. |
+| `npm run transfers:detect` | Finds transfer pairs. Dry by default; pass `--confirm` to write deterministic tier 1 pairs. Prints tier 2 suggestions; `--suggestions <n>` limits output. |
+| `npm run transfers:confirm` | Confirms a suggested pair: `--out <id> --in <id> --confirm`, or bulk-confirm every uncontested suggestion at a level via `--confidence HIGH --confirm`. |
 
 Every writing command defaults to dry-run or requires `--confirm`. This is real
 financial data and a bad bulk update is the cheapest possible way to ruin it.
