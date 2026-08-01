@@ -72,7 +72,6 @@ void runScript("categories:seed", async () => {
 
   if (dead.length === 0) {
     console.log("Every rule earns its place.");
-    return;
   }
 
   // Three outcomes, and only one of them is a bug.
