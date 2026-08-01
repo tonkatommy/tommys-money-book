@@ -17,6 +17,13 @@
     "sync:daily": "tsx src/scripts/sync-daily.ts",
     "akahu:probe": "tsx src/scripts/akahu-probe.ts",
     "accounts:map": "tsx src/scripts/accounts-map.ts",
+    "categories:discover": "tsx src/scripts/categories-discover.ts",
+    "categories:seed": "tsx src/scripts/categories-seed.ts",
+    "categories:apply": "tsx src/scripts/categories-apply.ts",
+    "categories:review": "tsx src/scripts/categories-review.ts",
+    "categories:recat": "tsx src/scripts/categories-recat.ts",
+    "transfers:detect": "tsx src/scripts/transfers-detect.ts",
+    "transfers:confirm": "tsx src/scripts/transfers-confirm.ts",
     "worker": "tsx src/worker/index.ts"
   },
   "dependencies": {

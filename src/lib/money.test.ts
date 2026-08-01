@@ -72,9 +72,11 @@ describe("centsToDollars", () => {
 
 describe("formatNZD", () => {
   it("formats cents as NZ currency", () => {
-    //   rather than a plain space: Intl uses a non-breaking space in
-    // some negative formats, and asserting on the literal output documents
-    // what the status page will actually render.
+    // Asserting on the exact literal output, deliberately. Intl formatting is
+    // locale-data-dependent and shifts between Node and ICU versions — it can
+    // switch to a non-breaking space, or move the minus sign relative to the
+    // currency symbol. Pinning the strings means such a change breaks a test
+    // instead of quietly altering every figure the status page renders.
     expect(formatNZD(482055)).toBe("$4,820.55");
     expect(formatNZD(0)).toBe("$0.00");
     expect(formatNZD(-550)).toBe("-$5.50");

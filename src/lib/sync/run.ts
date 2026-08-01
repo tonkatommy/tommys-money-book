@@ -8,6 +8,7 @@ import type { Account, PrismaClient } from "@/generated/prisma/client";
 import { createGateway, type AkahuGateway } from "@/lib/akahu";
 import { formatNZD } from "@/lib/money";
 import {
+  categoriseImported,
   earliestTransactionDate,
   importTransactions,
   latestTransactionDate,
@@ -180,6 +181,17 @@ async function syncAccount(input: {
   const transactions = await gateway.listTransactions(account.akahuId!, window);
   const counts = await importTransactions(prisma, account.id, transactions);
 
+  // Categorise what just landed. Scoped to these externalIds and to rows with
+  // no category, so the daily job can never revisit an earlier decision.
+  //
+  // Before the category list exists this is a no-op — there are no rules to
+  // match — which is exactly how Phase 1 behaved, so nothing regresses if
+  // seeding hasn't been run.
+  const categorised = await categoriseImported(
+    prisma,
+    transactions.map((transaction) => transaction.externalId),
+  );
+
   // Recomputed from the database rather than from what we just imported, so
   // these stay correct even if a previous run was interrupted halfway.
   const [historyStart, lastTransaction, storedTotal] = await Promise.all([
@@ -241,6 +253,9 @@ async function syncAccount(input: {
   console.log(
     `[sync]   ${account.name}: ${counts.inserted} new / ` +
       `${counts.duplicates} already held` +
+      (categorised.matched + categorised.unmatched > 0
+        ? `, ${categorised.matched} categorised / ${categorised.unmatched} for review`
+        : "") +
       (historyStart
         ? `, history from ${historyStart.toISOString().slice(0, 10)}`
         : ""),
