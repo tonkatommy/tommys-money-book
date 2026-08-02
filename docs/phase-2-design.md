@@ -517,5 +517,8 @@ have been if owner contributions were treated as income.
 - The rental gross-up mechanism. Phase 4, per decision 3.
 - Splitting mortgage interest from principal. Needs the loan statement.
 - Backfilling the Excel archive. Frozen by decision, plan §3.
-- Nightly `pg_dump`. Still absent, still the largest operational risk on real
-  financial data — raised again here, to be done before Phase 3.
+- ~~Nightly `pg_dump`.~~ **Done 01/08/2026**, before this branch merged: a
+  fourth compose service, dumps verified by reading them back, weekly automated
+  restore test, backups on their own volume. Remaining: point that volume at
+  the NAS, since a local Docker volume survives a bad command but not a dead
+  disk.

@@ -12,6 +12,7 @@
 
 import type { Account, Transaction } from "akahu";
 
+import { dollarsToCents } from "@/lib/money";
 import { normaliseAccount, normaliseTransaction } from "./normalise";
 import type {
   AkahuGateway,
@@ -22,9 +23,18 @@ import type {
 
 import fixtures from "./fixtures/akahu.json";
 
+type PendingFixture = {
+  _account: string;
+  amount: number;
+  description: string;
+  date: string;
+};
+
 type Fixtures = {
   accounts: Account[];
   transactions: Transaction[];
+  /** Optional so an older fixture file still loads. */
+  pending?: PendingFixture[];
 };
 
 export class FixtureAkahuGateway implements AkahuGateway {
@@ -42,6 +52,27 @@ export class FixtureAkahuGateway implements AkahuGateway {
 
   async listAccounts(): Promise<NormalisedAccount[]> {
     return this.data.accounts.map(normaliseAccount);
+  }
+
+  /**
+   * Pending totals per account, same contract as the live gateway.
+   *
+   * The fixture carries real pending rows on purpose. Returning an empty map
+   * would make every fixture account reconcile perfectly and the code path
+   * that caused the ANZ Money Card drift would never run outside production —
+   * which is precisely how that bug survived Phase 1.
+   */
+  async pendingTotalsByAccount(): Promise<Map<string, number>> {
+    const totals = new Map<string, number>();
+
+    for (const pending of this.data.pending ?? []) {
+      totals.set(
+        pending._account,
+        (totals.get(pending._account) ?? 0) + dollarsToCents(pending.amount),
+      );
+    }
+
+    return totals;
   }
 
   async listTransactions(

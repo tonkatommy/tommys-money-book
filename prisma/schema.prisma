@@ -141,6 +141,14 @@ model Account {
   balanceCents Int? // Akahu-reported current balance, in cents
   balanceAsAt  DateTime? // when Akahu last refreshed that balance
 
+  // Unsettled card authorisations, as Akahu last reported them.
+  //
+  // Never imported as transactions — pending rows have unstable ids and their
+  // amounts change when they settle, which would poison externalId dedupe.
+  // Only the total is kept, because the bank's reported balance already
+  // includes it and reconciliation has to subtract it back out.
+  pendingTotalCents Int @default(0)
+
   // The balance that existed *before* our earliest imported transaction.
   // Akahu only reaches back ~2 years, so "sum of stored transactions" can
   // never equal the bank balance on its own. We derive this once at baseline
@@ -315,7 +323,9 @@ model AccountSyncResult {
   windowEnd   DateTime?
 
   akahuBalanceCents    Int?
-  computedBalanceCents Int? // openingBalance + sum of everything we store
+  computedBalanceCents Int? // openingBalance + settled + pending
+  settledBalanceCents  Int? // openingBalance + settled only — what has cleared
+  pendingTotalCents    Int? // unsettled authorisations at the time of this run
   driftCents           Int? // akahu - computed; non-zero = we're missing rows
 
   error String?

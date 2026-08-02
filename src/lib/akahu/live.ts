@@ -2,6 +2,7 @@
 
 import { AkahuClient, type Cursor } from "akahu";
 
+import { dollarsToCents } from "@/lib/money";
 import { requireSecret, redact } from "@/lib/secrets";
 import { normaliseAccount, normaliseTransaction } from "./normalise";
 import type {
@@ -55,6 +56,33 @@ export class LiveAkahuGateway implements AkahuGateway {
   async listAccounts(): Promise<NormalisedAccount[]> {
     const accounts = await this.client.accounts.list(this.userToken);
     return accounts.map(normaliseAccount);
+  }
+
+  /**
+   * Sum Akahu's pending transactions, per account.
+   *
+   * One profile-wide call rather than one per account: Akahu's
+   * /transactions/pending returns every connected account's pending rows at
+   * once, and eleven separate requests to learn the same thing would be
+   * eleven chances to get rate limited.
+   */
+  async pendingTotalsByAccount(): Promise<Map<string, number>> {
+    const pending = await this.client.transactions.listPending(this.userToken);
+    const totals = new Map<string, number>();
+
+    for (const transaction of pending) {
+      // Float dollars from the wire, exactly as with settled transactions —
+      // so they cross into integer cents at the same boundary. Summing the
+      // floats first and converting once would reintroduce the drift the
+      // whole money module exists to prevent.
+      const cents = dollarsToCents(transaction.amount);
+      totals.set(
+        transaction._account,
+        (totals.get(transaction._account) ?? 0) + cents,
+      );
+    }
+
+    return totals;
   }
 
   async listTransactions(

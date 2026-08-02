@@ -367,8 +367,24 @@ These need Tommy's answer before the category list can be finalised:
 
 ---
 
-## 8. Outstanding operational item
+## 8. Outstanding operational item — resolved 01/08/2026
 
-`ANZ Money Card` drift is **-$121.23** and has not moved since 27/07. It is not
-a settling pending transaction — a persistent gap means the account is missing
-rows Akahu never returned. Every other account reconciles to $0.00.
+`ANZ Money Card` drift was **-$121.23** on 27/07 and **-$233.02** by 01/08. The
+conclusion recorded here — "a persistent gap means the account is missing rows
+Akahu never returned" — was **wrong**, and worth leaving in place as a record
+of how the evidence read at the time.
+
+Every stored row on that account forms an unbroken chain against Akahu's own
+per-transaction running balance; the only two discontinuities are on
+2025-07-16, the first day of history, which is a boundary artefact. Nothing
+was missing.
+
+The real cause: ANZ's reported `current` balance already reflects card
+authorisations that haven't settled, while the transaction feed returns settled
+rows only. Akahu's pending endpoint listed ten authorisations totalling exactly
+-$233.02. The reconciliation was comparing settled money against a balance that
+included unsettled money, so any account with live card activity showed
+permanent drift.
+
+Fixed by fetching pending totals and subtracting them. All 11 accounts now
+reconcile to zero.
