@@ -30,6 +30,13 @@ export type AccountStatusView = {
   driftCents: number | null;
   /** Non-zero drift on the last two or more runs — a real gap, not a blip. */
   driftIsPersistent: boolean;
+  /**
+   * Unsettled card authorisations. Not a problem — the bank's balance already
+   * includes them and reconciliation accounts for them — but worth showing,
+   * because it explains why the balance differs from what has actually
+   * cleared.
+   */
+  pendingTotalCents: number;
   lastSyncedAt: Date | null;
 };
 
@@ -108,6 +115,7 @@ export async function getSyncStatus(
       lastTransactionAt: account.lastTransactionAt,
       driftCents: latest?.driftCents ?? null,
       driftIsPersistent: isDriftPersistent(driftHistory),
+      pendingTotalCents: account.pendingTotalCents,
       lastSyncedAt: latest?.syncRun.startedAt ?? null,
     };
   });

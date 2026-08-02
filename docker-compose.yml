@@ -79,7 +79,43 @@ services:
       TZ: Pacific/Auckland
     # No ports. The worker reaches out to Postgres and Akahu; nothing reaches in.
 
+  backup:
+    # The same Postgres image, purely for its client tools — pg_dump must be
+    # the same major version as the server or it refuses to run, and pinning
+    # both to one image means that can never drift apart.
+    image: postgres:17-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-moneybook}
+      POSTGRES_DB: ${POSTGRES_DB:-moneybook}
+      # pg_dump and pg_restore read PGPASSWORD; no password ever appears in a
+      # command line, where `ps` would expose it.
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGHOST: db
+      BACKUP_DIR: /backups
+      BACKUP_CRON: ${BACKUP_CRON:-0 2 * * *}
+      BACKUP_VERIFY_CRON: ${BACKUP_VERIFY_CRON:-30 3 * * 0}
+      BACKUP_RETAIN_DAYS: ${BACKUP_RETAIN_DAYS:-30}
+      BACKUP_MIN_KEEP: ${BACKUP_MIN_KEEP:-7}
+      BACKUP_ON_START: ${BACKUP_ON_START:-false}
+      TZ: Pacific/Auckland
+    volumes:
+      # Read-only: this container runs the scripts, it has no business
+      # changing them.
+      - ./ops/backup:/opt/backup:ro
+      - db-backups:/backups
+    entrypoint: ["/opt/backup/entrypoint.sh"]
+    # No ports, and no reason to have any.
+
 volumes:
   # Named volume so the data survives `docker compose down`.
-  # Nightly pg_dump backup job gets added here in a later phase.
   db-data:
+  # Separate volume from db-data on purpose. A backup living inside the volume
+  # it is protecting is not a backup — `docker volume rm db-data` would take
+  # both. Point this at a NAS bind mount rather than a local volume once one
+  # is available; that is the difference between surviving a bad command and
+  # surviving a dead disk.
+  db-backups:

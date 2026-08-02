@@ -67,3 +67,52 @@ describe("FixtureAkahuGateway window semantics", () => {
     expect(dates).toEqual([...dates].sort((a, b) => a - b));
   });
 });
+
+describe("FixtureAkahuGateway.pendingTotalsByAccount", () => {
+  it("sums pending amounts per account, in cents", async () => {
+    const gateway = new FixtureAkahuGateway({
+      accounts: [],
+      transactions: [],
+      pending: [
+        { _account: "acc_a", amount: -23.5, description: "x", date: "2026-08-01" },
+        { _account: "acc_a", amount: -5, description: "y", date: "2026-08-01" },
+        { _account: "acc_b", amount: -1.05, description: "z", date: "2026-08-01" },
+      ],
+    } as never);
+
+    const totals = await gateway.pendingTotalsByAccount();
+
+    expect(totals.get("acc_a")).toBe(-2850);
+    expect(totals.get("acc_b")).toBe(-105);
+  });
+
+  it("omits accounts with nothing pending rather than returning zero", async () => {
+    // Callers use `?? 0`, so absent and zero mean the same thing — but not
+    // inventing entries keeps the map the size of the real answer.
+    const gateway = new FixtureAkahuGateway({
+      accounts: [],
+      transactions: [],
+      pending: [],
+    } as never);
+
+    expect((await gateway.pendingTotalsByAccount()).size).toBe(0);
+  });
+
+  it("treats a fixture with no pending key at all as nothing pending", async () => {
+    const gateway = new FixtureAkahuGateway({
+      accounts: [],
+      transactions: [],
+    } as never);
+
+    expect((await gateway.pendingTotalsByAccount()).size).toBe(0);
+  });
+
+  it("ships pending data in the real fixture, so the path is exercised", async () => {
+    // The bug that motivated all this survived Phase 1 precisely because no
+    // fixture ever had a pending transaction — every fixture account
+    // reconciled perfectly and the code path never ran outside production.
+    const totals = await new FixtureAkahuGateway().pendingTotalsByAccount();
+
+    expect(totals.size).toBeGreaterThan(0);
+  });
+});

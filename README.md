@@ -50,6 +50,7 @@ Design decisions worth noting:
 - **Categorisation is rules, not hand-sorting.** Bank descriptions carry a per-transaction reference that makes every row unique; normalising them away collapsed 1,786 uncategorised transactions to 184 distinct patterns. ~140 rules now categorise 82% of the baseline automatically.
 - **A human decision is never overwritten.** `categorySource` marks whether a category came from a rule or a person. The matcher skips the second kind, so a correction survives every rule change and every daily sync — otherwise the sync would quietly restore precisely the answer that was wrong, and the books would still balance.
 - **Reconciliation needs an opening balance.** Akahu only reaches back about two years, so "sum of stored transactions equals the bank balance" can never hold on its own. The balance that predates our earliest transaction is derived once at baseline; drift is measured against that from then on.
+- **And it needs pending transactions.** The bank's reported balance includes card authorisations that haven't settled; the transaction feed contains only settled rows. Comparing one against the other gives permanent drift on any account with live card activity — so pending totals are fetched and subtracted. The pending rows themselves are never imported: their ids are unstable and their amounts change on settlement, which would poison `externalId` dedupe.
 - **The incremental sync window looks backwards.** Each run re-reads the last seven days rather than starting where the previous run finished — banks post transactions late, and anchoring on run time would skip them permanently. Dedupe makes the overlap free.
 - **NZ financial year (01/04–31/03) is derived from the transaction date**, not stored — one SQL expression used by every report.
 
@@ -132,6 +133,14 @@ npm run categories:apply -- --confirm
 | `npm run transfers:detect` | Pairs ANZ internal transfers automatically (deterministic — both legs name each other), lists everything else as suggestions. `--confirm` writes the automatic tier. |
 | `npm run transfers:confirm` | Confirm a suggestion: `--out <id> --in <id>`, or `--confidence HIGH` for every uncontested one at that level. |
 
+**Backups**
+
+| Command | What it does |
+|---|---|
+| `npm run db:backup` | Take one now. The nightly job runs the same script. |
+| `npm run db:backup:verify` | Restore the newest dump into a scratch database, count the rows, drop it. Never touches the live database. |
+| `npm run db:backup:list` | What's currently retained. |
+
 **Checks**
 
 | Command | What it does |
@@ -175,11 +184,55 @@ Three services: the Next.js app on :3000, Postgres, and the sync worker
 (no exposed port — it only talks to Postgres and Akahu). Migrations are never
 run automatically; apply them with `npm run db:migrate`.
 
+## Backups
+
+A fourth container runs `pg_dump` nightly at 2am NZ and a restore test at
+3:30am Sunday. `docker compose logs backup` is the whole history.
+
+What's being protected is worth being precise about, because it sets the bar.
+The bank transactions are re-fetchable — Akahu hands them back on a fresh
+baseline pull. What is *not* recoverable is everything a human decided: which
+category each transaction is in, which transfers were confirmed as pairs,
+which book each account belongs to. That's hours of judgement stored nowhere
+else.
+
+How it avoids the usual ways backups fail:
+
+- **A partial dump is never mistaken for a good one.** Dumps are written to
+  `.partial` and renamed only after they verify. A rename within a filesystem
+  is atomic, so a crash mid-dump leaves obvious junk rather than a truncated
+  file that looks fine until you need it.
+- **Every dump is read back.** `pg_restore --list` runs against it immediately;
+  a dump that can't be listed is deleted and the run fails.
+- **Restores are tested weekly, not assumed.** The newest dump is restored into
+  a throwaway database, its rows counted, and the database dropped. An empty
+  restore fails the check — a successful restore of nothing is the failure this
+  is looking for.
+- **A suddenly tiny dump is flagged.** Less than half the previous size warns
+  loudly. That's what a dump of an empty database looks like.
+- **Pruning can't empty the directory.** Retention is 30 days, but the newest 7
+  are kept regardless, so a container starting after a long outage can't delete
+  everything before writing its first new backup.
+- **Backups live on their own volume.** `db-backups`, not inside `db-data` — a
+  backup stored in the volume it protects dies with it.
+
+Restoring *over* the live database is deliberately not scripted. It's a slow,
+deliberate decision, so the command should be in front of you when you make it:
+
+```bash
+docker compose exec backup pg_restore --username=moneybook --dbname=moneybook --clean --if-exists --no-owner --exit-on-error /backups/moneybook-YYYYMMDDThhmmssZ.dump
+```
+
+Stop the app and worker first, or they'll write into a half-restored database.
+
+**Still to do:** `db-backups` is a local Docker volume, which survives a bad
+command but not a dead disk. Point it at a NAS bind mount to fix that.
+
 ## Security
 
 - Read-only Akahu tokens stored as Docker secrets — never in the repo or database
 - LAN-only binding, remote access via Tailscale, HTTPS even on the local network
-- Nightly database backups to a separate volume, restore-tested
+- Nightly database backups on a separate volume, restore-tested weekly
 
 ## Status
 
@@ -205,8 +258,14 @@ Akahu's enrichment only fires on card spending. Descriptions had to carry the
 work instead. [docs/phase-2-discovery.md](docs/phase-2-discovery.md) has the
 evidence, [docs/phase-2-design.md](docs/phase-2-design.md) the decisions.
 
+Reconciliation is clean: all 11 accounts sit at zero drift. Getting there meant
+fixing a real bug — the check compared settled transactions against a bank
+balance that already included unsettled card authorisations, so any account
+with live card activity showed permanent drift. A warning that is always on is
+a warning nobody reads, and it would have buried a genuinely missing
+transaction in noise.
+
 Next up is Phase 3 — the transaction list and dashboard, which is the go-live
-point. **Before that: nightly `pg_dump`.** Plan §7 has always wanted it and
-there is now a year of real financial data with nothing backing it up.
+point.
 
 Built in the open as a learning and portfolio project.
