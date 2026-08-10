@@ -57,9 +57,8 @@ cookie whose value is `${issuedAt}.${hmac}`, where `hmac` is
 table — verifying is recomputing the HMAC and checking `issuedAt` is within
 30 days, so this stays as stateless as the rest of the app.
 
-`middleware.ts` runs on every request except `/login` and Next's static
-asset paths, checks the cookie, and redirects to `/login?next=<path>` if
-it's missing, malformed, or expired. A logout action clears the cookie.
+`middleware.ts` runs on every request except `/login` and Next's static asset paths; because middleware runs in the Edge runtime, cookie verification must use Web Crypto (`crypto.subtle`) rather than Node `crypto`.
+If auth fails it redirects to `/login?next=<path>`, where `next` is URL-encoded and validated as a same-origin relative path (starts with `/`) to avoid open redirects. A logout action clears the cookie.
 
 No lockout or rate-limiting on login attempts: single user, LAN-only, and a
 determined attacker on the LAN has bigger options available than brute-forcing
