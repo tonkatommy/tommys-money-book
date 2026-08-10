@@ -47,8 +47,7 @@ always intended a single shared password behind LAN/Tailscale; this is where
 that gap has to close, before anything writable ships. It also retroactively
 protects the existing status page, which currently has none.
 
-**Design:** one shared password (`APP_PASSWORD` env var, gitignored like the
-Akahu tokens). `/login` is the only route that doesn't require a session.
+**Design:** one shared password (`APP_PASSWORD` env var, provided the same way as the Akahu tokens — via environment variables or Docker secret files). `/login` is the only route that doesn't require a session.
 Its Server Action compares the submitted password against `APP_PASSWORD`
 with `crypto.timingSafeEqual` (not `===`, which short-circuits on the first
 mismatched byte and leaks timing information about how much of the password
