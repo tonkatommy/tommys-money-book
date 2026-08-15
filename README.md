@@ -144,7 +144,7 @@ npm run categories:apply -- --confirm
 **Checks**
 
 | Command | What it does |
-|---|---|
+| --- | --- |
 | `npm test` | Unit tests: money, normalisation, sync window, reconciliation, rule matching, transfer pairing. |
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm run lint` | ESLint. |
