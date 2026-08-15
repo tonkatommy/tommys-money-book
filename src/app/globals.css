@@ -317,6 +317,98 @@ p {
   }
 }
 
+/* The filter panel: a grid of labelled controls that collapses to one column
+   on a phone. Wider than .ds-filterbar, which is the single search box in a
+   screen header. */
+.ds-filtergrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+  align-items: end;
+}
+
+/* Sticks to the bottom of the viewport so the action stays reachable with 50
+   rows above it — the selection is made by scrolling, and a bar that scrolled
+   away with it would mean scrolling back to use it. */
+.ds-bulkbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-4) var(--space-6);
+  background: var(--surface-card);
+  border-top: 1px solid var(--border-default);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+
+.ds-bulkbar-select {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+/* Below the tab bar's breakpoint the bottom nav owns the bottom edge, so the
+   bar sits above it rather than under it. */
+@media (max-width: 768px) {
+  .ds-bulkbar {
+    bottom: 64px;
+  }
+}
+
+.ds-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* The label above a bare control in a filter grid. Matches the label FormField
+   renders, so a filter field and a form field read as the same thing — the
+   grid just doesn't need FormField's hint and error slots. */
+.mb-field-label {
+  display: block;
+  margin-bottom: 7px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+/* Available to a screen reader, invisible to everyone else. Used where a
+   control's purpose is obvious from its position but has no visible label. */
+.mb-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The list row grows a checkbox column at the left. */
+.mb-txn-pick {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 0;
+}
+
+@media (min-width: 900px) {
+  .mb-txn-pick {
+    grid-template-columns: auto 1.5fr 1.1fr auto;
+  }
+}
+
 /* ==========================================================================
    App layout (design project: app.css)
 
