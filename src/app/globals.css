@@ -1,26 +1,927 @@
 @import "tailwindcss";
 
+/* Tommy's Money Book design system.
+ *
+ * Ported from the Claude Design project
+ * be28709a-d521-4a24-8404-a9233306867c ("Akahu money book design"), which is
+ * where the visual decisions are made and reviewed.
+ *
+ * The tokens below keep the design system's ORIGINAL names — --surface-card,
+ * --text-primary — rather than being renamed into Tailwind's namespace. That
+ * matters more than it looks: the design project ships real CSS (its
+ * styles.css and app.css, reproduced at the foot of this file), and keeping
+ * the names means that CSS applies verbatim and stays diffable against the
+ * next pull. Renaming would make every future design change a manual
+ * re-translation that nobody can verify.
+ *
+ * Tailwind utilities are layered on top as aliases in the @theme block, so
+ * `bg-surface` and `text-fg-muted` work for one-off styling without the
+ * tokens themselves living in Tailwind's namespace. That indirection is also
+ * what avoids a real collision: Tailwind derives font sizes from --text-*, so
+ * a token literally named --text-primary would fight with `text-sm`.
+ *
+ * Dark only. This app renders bank balances in a room at night; there is no
+ * light theme and no prefers-color-scheme switch to get half-right.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* warm neutral scale — never cool gray */
+  --stone-950: #151009;
+  --stone-900: #1c150d;
+  --stone-850: #221a10;
+  --stone-800: #291f13;
+  --stone-700: #3a2c19;
+  --stone-600: #4f3d23;
+  --stone-500: #6b5738;
+  --stone-400: #8f7a58;
+  --stone-300: #b3a080;
+  --stone-200: #d6c9ab;
+  --stone-100: #ece3d0;
+  --stone-50: #f7f2e6;
+
+  /* brand accent — amber to orange */
+  --amber-300: #fcd34d;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+  --amber-600: #ea580c;
+  --amber-700: #c2410c;
+
+  /* secondary — cool sky, used sparingly (Business book, links) */
+  --sky-300: #7dd3fc;
+  --sky-400: #38bdf8;
+  --sky-500: #0ea5e9;
+
+  /* surfaces & background */
+  --bg-page-grad: radial-gradient(
+    120% 140% at 15% -20%,
+    #2a2010 0%,
+    #100c08 55%,
+    #0a0806 100%
+  );
+  --surface-card: var(--stone-900);
+  --surface-card-raised: var(--stone-850);
+  --surface-inset: #120d08;
+  --border-subtle: #2a2013;
+  --border-default: #423119;
+
+  /* text */
+  --text-primary: #f5eee0;
+  --text-secondary: #c9bb9f;
+  --text-tertiary: #9c8865;
+  --text-muted: #7a6a4e;
+  --text-disabled: #5a4d38;
+  --text-on-accent: #241405;
+  --link: var(--amber-400);
+  --link-hover: var(--amber-300);
+
+  /* accent gradient + glow */
+  --accent-gradient: linear-gradient(135deg, #fbbf24, #ea580c);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 10px 28px rgba(0, 0, 0, 0.45);
+  --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 18px 40px rgba(0, 0, 0, 0.55);
+  --shadow-glow-accent: 0 0 0 1px rgba(251, 191, 36, 0.35),
+    0 10px 30px rgba(234, 88, 12, 0.3);
+  --shadow-focus: 0 0 0 3px rgba(251, 191, 36, 0.35);
+  --focus-ring: var(--amber-400);
+
+  /* status */
+  --status-ok: #4ade80;
+  --status-ok-bg: rgba(74, 222, 128, 0.12);
+  --status-ok-border: rgba(74, 222, 128, 0.4);
+  --status-warning: #fbbf24;
+  --status-warning-bg: rgba(251, 191, 36, 0.14);
+  --status-warning-border: rgba(251, 191, 36, 0.4);
+  --status-error: #f87171;
+  --status-error-bg: rgba(248, 113, 113, 0.14);
+  --status-error-border: rgba(248, 113, 113, 0.4);
+  --status-neutral: #9c8865;
+  --status-neutral-bg: rgba(156, 136, 101, 0.14);
+  --status-neutral-border: rgba(156, 136, 101, 0.4);
+
+  /* money. Out is orange rather than red: most spending is not a problem,
+     and colouring every purchase like an error trains you to ignore it. */
+  --money-in: #4ade80;
+  --money-out: #fb923c;
+  --money-transfer: var(--text-tertiary);
+
+  /* book split */
+  --book-personal: var(--amber-400);
+  --book-business: var(--sky-400);
+
+  /* type. Geist arrives via next/font in layout.tsx — deliberately NOT the
+     design system's Google Fonts @import, which would put a render-blocking
+     request to fonts.googleapis.com in front of a LAN-only app that may not
+     have a route to the internet at all. */
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), "SF Mono", Consolas,
+    "Liberation Mono", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-md: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 26px;
+
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-normal: 1.5;
+  --tracking-tight: -0.01em;
+  --tracking-wide: 0.06em;
+
+  /* space & shape */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 999px;
+
+  --duration-fast: 100ms;
+  --duration-base: 180ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Tailwind aliases. `inline` so the generated utilities resolve straight to
+   the token above rather than adding another variable hop. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface: var(--surface-card);
+  --color-surface-raised: var(--surface-card-raised);
+  --color-surface-inset: var(--surface-inset);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+
+  --color-fg: var(--text-primary);
+  --color-fg-secondary: var(--text-secondary);
+  --color-fg-tertiary: var(--text-tertiary);
+  --color-fg-muted: var(--text-muted);
+  --color-fg-on-accent: var(--text-on-accent);
+
+  --color-ok: var(--status-ok);
+  --color-warn: var(--status-warning);
+  --color-error: var(--status-error);
+
+  --color-money-in: var(--money-in);
+  --color-money-out: var(--money-out);
+  --color-book-personal: var(--book-personal);
+  --color-book-business: var(--book-business);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  background: var(--bg-page-grad);
+  background-attachment: fixed;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--link-hover);
+}
+
+::selection {
+  background: rgba(251, 191, 36, 0.25);
+}
+
+input::placeholder {
+  color: var(--text-muted);
+}
+
+h1,
+h2,
+h3,
+p {
+  text-wrap: pretty;
+}
+
+/* ==========================================================================
+   Design system component CSS (design project: styles.css)
+   Only the three components that genuinely need a stylesheet — everything
+   else styles itself inline so it stays portable.
+   ========================================================================== */
+
+@keyframes ds-skeleton {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.ds-skeleton {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--surface-inset) 0%,
+    var(--stone-800) 45%,
+    var(--surface-inset) 90%
+  );
+  background-size: 220% 100%;
+  animation: ds-skeleton 1.5s linear infinite;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-skeleton {
+    animation: none;
+  }
+}
+
+.ds-bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  background: var(--surface-card);
+  border-top: 1px solid var(--border-subtle);
+  font-family: var(--font-sans);
+}
+
+@media (min-width: 768px) {
+  .ds-bottom-nav {
+    display: none;
+  }
+}
+
+.ds-filterbar {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+  font-family: var(--font-sans);
+}
+
+.ds-filterbar-search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.ds-filterbar-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .ds-filterbar {
+    align-items: stretch;
+  }
+  .ds-filterbar-search {
+    flex: 1 1 100%;
+  }
+}
+
+/* ==========================================================================
+   App layout (design project: app.css)
+
+   Every width decision is a media query — there is no device mode. The
+   prototype originally faked one with a Desktop/Phone toggle; this is the
+   real thing. Breakpoints: 768px sidebar vs bottom tab bar, 900px two-column
+   content, 640px stacked controls.
+   ========================================================================== */
+
+.mb-shell {
+  display: flex;
+  min-height: 100vh;
+  align-items: flex-start;
+}
+
+.mb-sidebar {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .mb-sidebar {
+    display: block;
+    flex: 0 0 auto;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+}
+
+.mb-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mb-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  background: var(--stone-950);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mb-header > * {
+  min-width: 0;
+}
+
+.mb-header-period {
+  flex: 1 1 210px;
+}
+
+@media (min-width: 768px) {
+  .mb-header {
+    padding: 18px 32px;
+  }
+}
+
+/* Bottom padding clears the fixed tab bar on narrow screens. */
+.mb-body {
+  flex: 1;
+  padding: 18px 18px 96px;
+}
+
+@media (min-width: 768px) {
+  .mb-body {
+    padding: 28px 32px 48px;
+  }
+}
+
+/* visibility helpers, by width only */
+.mb-wide-only {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .mb-wide-only {
+    display: block;
+  }
+}
+
+.mb-narrow-only {
+  display: block;
+}
+
+@media (min-width: 768px) {
+  .mb-narrow-only {
+    display: none;
+  }
+}
+
+.mb-wide-flex {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .mb-wide-flex {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+}
+
+/* stacks and grids */
+.mb-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.mb-stack-sm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.mb-grid {
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 900px) {
+  .mb-grid-main {
+    grid-template-columns: 1.45fr 1fr;
+    align-items: start;
+  }
+  .mb-grid-split {
+    grid-template-columns: 1fr 1.2fr;
+    align-items: start;
+  }
+  .mb-grid-setup {
+    grid-template-columns: 1.35fr 1fr;
+    align-items: start;
+  }
+}
+
+@media (min-width: 768px) {
+  .mb-grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.mb-grid-4 {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 768px) {
+  .mb-grid-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.mb-grid-tight {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .mb-grid-tight {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* hero split: stacked under 900, side by side above */
+.mb-hero {
+  display: grid;
+  grid-template-columns: 1fr;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+@media (min-width: 900px) {
+  .mb-hero {
+    grid-template-columns: minmax(280px, 0.85fr) 1.15fr;
+  }
+}
+
+.mb-hero-left {
+  padding: var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+@media (min-width: 900px) {
+  .mb-hero-left {
+    border-bottom: none;
+    border-right: 1px solid var(--border-subtle);
+  }
+}
+
+.mb-hero-right {
+  padding: var(--space-6);
+}
+
+/* The headline figure scales with the viewport rather than switching at a
+   breakpoint — it is the one number the whole screen exists to show. */
+.mb-figure {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-size: clamp(34px, 9vw, 52px);
+}
+
+.mb-figure-md {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-size: clamp(28px, 7vw, 40px);
+}
+
+/* screen head: title left, actions below on narrow, right on wide */
+.mb-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+@media (min-width: 768px) {
+  .mb-head {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+  }
+}
+
+.mb-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* list rows */
+.mb-rows {
+  padding: 0 var(--space-6) var(--space-5);
+}
+
+.mb-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.mb-txn {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 0;
+}
+
+@media (min-width: 900px) {
+  .mb-txn {
+    grid-template-columns: 1.5fr 1.1fr auto;
+  }
+}
+
+.mb-txn-mid {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .mb-txn-mid {
+    display: block;
+    min-width: 0;
+  }
+}
+
+.mb-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mb-decide {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+}
+
+@media (min-width: 900px) {
+  .mb-decide {
+    grid-template-columns: 1.3fr auto;
+  }
+}
+
+.mb-setup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  flex-wrap: wrap;
+}
+
+.mb-account {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 14px 0;
+}
+
+@media (min-width: 640px) {
+  .mb-account {
+    grid-template-columns: 1.6fr repeat(3, minmax(90px, auto));
+    align-items: center;
+    gap: 16px;
+  }
+}
+
+.mb-num {
+  font-family: var(--font-mono);
+}
+
+.mb-right {
+  text-align: right;
+}
+
+@media (max-width: 639px) {
+  .mb-right {
+    text-align: left;
+  }
+}
+
+/* bulk action bar, above the bottom nav */
+.mb-bulkbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  background: var(--surface-card-raised);
+  border-top: 1px solid var(--border-default);
+  box-shadow: var(--shadow-raised);
+}
+
+@media (min-width: 768px) {
+  .mb-bulkbar {
+    left: 220px;
+    padding: 12px 32px;
+  }
+}
+
+.mb-checkbox {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: var(--amber-500);
+  cursor: pointer;
+}
+
+.mb-tap {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Table fallback — the sync page's run log is genuinely tabular. */
+.mb-scroll-x {
+  overflow-x: auto;
+}
+
+/* ==========================================================================
+   Native form controls, styled
+
+   The design system's controls hold their state in React. These are native
+   inputs driven entirely by :checked and :focus-within, which is what lets a
+   whole screen of amounts, switches and choices submit as one plain form with
+   no client JavaScript. Interaction states that would otherwise need mouse
+   handlers (and therefore "use client") live here too.
+   ========================================================================== */
+
+.mb-btn {
+  transition: filter var(--duration-base) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.mb-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.mb-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.mb-btn:focus-visible,
+.mb-input:focus-visible,
+.mb-select:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: var(--shadow-focus);
+}
+
+.mb-input,
+.mb-select {
+  width: 100%;
+  min-height: 40px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 9px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  outline: none;
+}
+
+.mb-select {
+  width: auto;
+  cursor: pointer;
+}
+
+.mb-input[aria-invalid="true"] {
+  border-color: var(--status-error-border);
+}
+
+/* $-prefixed amount field. The wrapper carries the focus ring so the prefix
+   sits inside the same visual box as the input. */
+.mb-amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.mb-amount:focus-within {
+  border-color: var(--focus-ring);
+  box-shadow: var(--shadow-focus);
+}
+
+.mb-amount[data-invalid] {
+  border-color: var(--status-error-border);
+}
+
+.mb-amount input {
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  text-align: right;
+}
+
+.mb-amount[data-invalid] input {
+  color: var(--status-error);
+}
+
+/* Choice pills, backed by radios. */
+.mb-choices {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mb-choice {
+  cursor: pointer;
+}
+
+.mb-choice input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mb-choice > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 7px 13px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: var(--surface-inset);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  transition: filter var(--duration-base) var(--ease-standard);
+}
+
+.mb-choice:hover > span {
+  filter: brightness(1.15);
+}
+
+.mb-choice input:checked + span {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--text-on-accent);
+}
+
+.mb-choice input:focus-visible + span {
+  box-shadow: var(--shadow-focus);
+}
+
+/* Switch, backed by a checkbox. */
+.mb-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+
+.mb-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mb-switch-track {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-default);
+  transition: background var(--duration-base) var(--ease-standard);
+}
+
+.mb-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  transition: left var(--duration-base) var(--ease-standard),
+    background var(--duration-base) var(--ease-standard);
+}
+
+.mb-switch input:checked + .mb-switch-track {
+  background: var(--accent-gradient);
+  border-color: transparent;
+}
+
+.mb-switch input:checked + .mb-switch-track::after {
+  left: 18px;
+  background: var(--text-on-accent);
+}
+
+.mb-switch input:focus-visible + .mb-switch-track {
+  box-shadow: var(--shadow-focus);
+}
+
+.mb-switch-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* Row hover on clickable list rows. */
+.mb-row-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.mb-row-link:hover {
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
 }
