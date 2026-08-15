@@ -47,8 +47,15 @@ describe("signSession / verifySession", () => {
   });
 
   it("accepts a session right at the edge of 30 days", () => {
-    const issuedAt = Date.now() - 29 * DAY_MS;
-    expect(verifySession(signSession(issuedAt))).toBe(true);
+    vi.useFakeTimers();
+    try {
+      const now = new Date("2020-01-01T00:00:00.000Z");
+      vi.setSystemTime(now);
+      const issuedAt = now.getTime() - 30 * DAY_MS;
+      expect(verifySession(signSession(issuedAt))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects malformed input without throwing", () => {
