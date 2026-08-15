@@ -1,0 +1,12 @@
+{
+  "config": {
+    "default": true,
+    // Table rows and fenced code blocks can't be wrapped without breaking
+    // their syntax, so MD013 only checks prose and headings.
+    "MD013": {
+      "line_length": 80,
+      "code_blocks": false,
+      "tables": false
+    }
+  }
+}
