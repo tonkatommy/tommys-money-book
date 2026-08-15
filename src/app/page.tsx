@@ -10,6 +10,7 @@
 import { prisma } from "@/lib/prisma";
 import { formatNZD } from "@/lib/money";
 import { getSyncStatus, type SyncStatusView } from "@/lib/sync/status";
+import { logout } from "@/app/login/actions";
 
 // Without this, Next.js would run the queries once at build time and bake the
 // result into static HTML. Sync status is only useful if it's live.
@@ -50,11 +51,21 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-zinc-950 p-6 sm:p-10">
       <div className="mx-auto w-full max-w-4xl space-y-6">
-        <header>
-          <h1 className="text-2xl font-semibold text-zinc-100">
-            Tommy&apos;s Money Book
-          </h1>
-          <p className="mt-1 text-sm text-zinc-400">Sync status</p>
+        <header className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-zinc-100">
+              Tommy&apos;s Money Book
+            </h1>
+            <p className="mt-1 text-sm text-zinc-400">Sync status</p>
+          </div>
+          <form action={logout}>
+            <button
+              type="submit"
+              className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
+            >
+              Log out
+            </button>
+          </form>
         </header>
 
         {!data.ok ? (
