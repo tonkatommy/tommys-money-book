@@ -6,7 +6,8 @@ via the [Akahu](https://www.akahu.nz) open banking API, keeps personal and
 sole-trader business books strictly separate, and produces the numbers needed
 for NZ tax time (IR3 rental and business income, GST threshold monitoring).
 
-Runs on a homelab. Single user. LAN/Tailscale only — nothing exposed to the internet.
+Runs on a homelab. Single user. LAN/Tailscale only — nothing exposed to the
+internet.
 
 ## Why
 
