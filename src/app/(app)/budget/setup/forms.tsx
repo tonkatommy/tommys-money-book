@@ -14,10 +14,66 @@ import { AmountField, SwitchField, TextField } from "@/components/ui/form";
 import { formatNZD, formatNZDWhole } from "@/lib/money";
 import type { CategoryBudgetView } from "@/lib/budget/query";
 import {
+  pinDetectedBillsAction,
   saveBudgetAction,
   savePayCycleAction,
   type FormState,
 } from "../actions";
+
+/**
+ * Pin every detected bill at once.
+ *
+ * Its own `<form>` rather than a button inside the budget form above: this
+ * posts nothing but the book and the period, and submitting it through the
+ * other form would carry every amount field along with it and save them as a
+ * side effect of pressing "pin".
+ */
+export function PinBillsForm({
+  book,
+  periodStart,
+  count,
+}: {
+  book: string;
+  periodStart: string;
+  count: number;
+}) {
+  const [state, formAction, pending] = useActionState<FormState, FormData>(
+    pinDetectedBillsAction,
+    undefined,
+  );
+
+  return (
+    <form
+      action={formAction}
+      style={{
+        marginTop: "var(--space-4)",
+        paddingTop: "var(--space-4)",
+        borderTop: "1px solid var(--border-subtle)",
+      }}
+    >
+      <input type="hidden" name="book" value={book} />
+      <input type="hidden" name="periodStart" value={periodStart} />
+
+      <Button type="submit" variant="secondary" size="sm" disabled={pending}>
+        {pending
+          ? "Pinning…"
+          : `Pin ${count === 1 ? "this bill" : `all ${count} bills`}`}
+      </Button>
+
+      <p
+        style={{
+          margin: "10px 0 0",
+          fontSize: "var(--text-xs)",
+          color: state?.error ? "var(--status-error)" : "var(--text-muted)",
+          lineHeight: 1.6,
+        }}
+      >
+        {state?.error ??
+          "Each one is budgeted at the amount it usually costs, and its due day is filled in. Change any of it above afterwards."}
+      </p>
+    </form>
+  );
+}
 
 export function BudgetForm({
   book,

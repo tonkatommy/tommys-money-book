@@ -21,7 +21,7 @@ import {
   resolvePeriod,
   suggestFixedBills,
 } from "@/lib/budget/query";
-import { BudgetForm, PayCycleForm } from "./forms";
+import { BudgetForm, PayCycleForm, PinBillsForm } from "./forms";
 
 export const dynamic = "force-dynamic";
 
@@ -199,6 +199,14 @@ export default async function SetupPage({
                 </div>
               );
             })}
+
+            {unpinned.length > 0 && (
+              <PinBillsForm
+                book={book}
+                periodStart={period.start.toISOString().slice(0, 10)}
+                count={unpinned.length}
+              />
+            )}
 
             {unpinned.length === 0 && (
               <div

@@ -14,10 +14,16 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hasSession } from "@/lib/auth/guard";
-import { parseBook } from "@/lib/budget/query";
+import {
+  getBudgetView,
+  parseBook,
+  resolvePeriod,
+  suggestFixedBills,
+} from "@/lib/budget/query";
 import {
   applyMonthEnd,
   parseDollarsToCents,
+  pinDetectedBills,
   saveBudgets,
   savePayCycle,
   type BudgetEntry,
@@ -107,6 +113,54 @@ export async function saveBudgetAction(
 
   revalidatePath("/budget");
   redirect(book === "BUSINESS" ? "/budget?book=BUSINESS" : "/budget");
+}
+
+/**
+ * Pin every bill the detector found and the reader hasn't pinned.
+ *
+ * The form posts only the book and the period. Which categories get pinned is
+ * decided here, by re-running detection against the same period the panel was
+ * rendered for — so a hand-rolled POST cannot name a category the detector
+ * never flagged, and the button can't drift out of step with the list above it.
+ */
+export async function pinDetectedBillsAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  if (!(await hasSession())) return UNAUTHORISED;
+
+  const book = parseBook(String(formData.get("book") ?? ""));
+  const periodValue = String(formData.get("periodStart") ?? "");
+  if (!parsePeriodStart(periodValue)) {
+    return { ok: false, error: "That period is not a date. Reload and try again." };
+  }
+
+  const { period, settings } = await resolvePeriod(periodValue);
+  const [view, suggestions] = await Promise.all([
+    getBudgetView(book, period, settings),
+    suggestFixedBills(book, period, settings),
+  ]);
+
+  const pinned = new Set(
+    view.allCategories.filter((category) => category.isFixed).map((c) => c.categoryId),
+  );
+  const known = new Set(view.allCategories.map((category) => category.categoryId));
+
+  const unpinned = [...suggestions.values()].filter(
+    (suggestion) =>
+      known.has(suggestion.categoryId) && !pinned.has(suggestion.categoryId),
+  );
+
+  if (unpinned.length === 0) {
+    return { ok: false, error: "Every bill we can see is already pinned." };
+  }
+
+  const result = await pinDetectedBills(book, period.start, unpinned);
+  if (!result.ok) return { ok: false, error: result.error };
+
+  revalidatePath("/budget");
+  revalidatePath("/budget/setup");
+  return undefined;
 }
 
 /** Save the pay cycle. Separate form, separate submit — it changes every period. */

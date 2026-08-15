@@ -151,6 +151,122 @@ export async function saveBudgets(
   }
 }
 
+/** What a detected bill looks like to the pinning code. */
+export type DetectedBill = {
+  categoryId: string;
+  /** The most recent amount — the best guess for a stable bill. */
+  amountCents: number;
+  /** The median — robust to a catch-up payment, so better when it varies. */
+  typicalAmountCents: number;
+  dueDay: number;
+  estimated: boolean;
+};
+
+/**
+ * The budget to write when pinning a bill.
+ *
+ * Split out from the write so the one judgement here is testable without a
+ * database. Two rules, in order:
+ *
+ *   1. An existing standing budget wins. A figure Tommy typed is a decision,
+ *      and pinning a bill is not the moment to overwrite it with an average.
+ *   2. Otherwise take the detected amount — the median when the bill varies,
+ *      because one catch-up double payment would drag the latest figure well
+ *      away from what actually repeats, and the latest figure when it doesn't,
+ *      because for a stable bill that is literally next month's cost.
+ */
+export function billBudgetCents(
+  standingCents: number | null,
+  bill: Pick<DetectedBill, "amountCents" | "typicalAmountCents" | "estimated">,
+): number {
+  if (standingCents !== null && standingCents > 0) return roundToDollar(standingCents);
+  return roundToDollar(
+    bill.estimated ? bill.typicalAmountCents : bill.amountCents,
+  );
+}
+
+/**
+ * Pin every detected bill that isn't pinned yet.
+ *
+ * The detection is re-run here rather than taken from the request. That is the
+ * whole security design of this function: a Server Action is reachable as a
+ * direct POST, so a list of category ids in the form data is a list of
+ * categories an attacker chose. Recomputing means this can only ever pin what
+ * `detectRecurring` independently found — the button carries no more authority
+ * than the panel it sits under.
+ *
+ * An amount is always written, and that matters more than it looks. A pinned
+ * bill with a zero budget is worse than an unpinned one: `budgetTotals` holds
+ * back `budgetCents - spentCents` for unpaid bills, so a zero-budget bill
+ * reserves nothing, and being fixed has already removed it from the pace
+ * calculation. It would disappear from the budget in both directions at once.
+ */
+export async function pinDetectedBills(
+  book: Book,
+  periodStart: Date,
+  suggestions: readonly DetectedBill[],
+): Promise<{ ok: true; pinned: number } | { ok: false; error: string }> {
+  if (suggestions.length === 0) {
+    return { ok: false, error: "There are no unpinned bills to pin." };
+  }
+
+  const bookError = await assertBook(
+    suggestions.map((suggestion) => suggestion.categoryId),
+    book,
+  );
+  if (bookError) return { ok: false, error: bookError };
+
+  try {
+    const existing = await prisma.categoryBudget.findMany({
+      where: {
+        categoryId: { in: suggestions.map((suggestion) => suggestion.categoryId) },
+        periodStart: { lte: periodStart },
+      },
+      orderBy: { periodStart: "desc" },
+    });
+
+    const standing = new Map<string, (typeof existing)[number]>();
+    for (const row of existing) {
+      if (!standing.has(row.categoryId)) standing.set(row.categoryId, row);
+    }
+
+    const writes = suggestions.map((suggestion) => {
+      const current = standing.get(suggestion.categoryId);
+      const amountCents = billBudgetCents(current?.amountCents ?? null, suggestion);
+
+      return prisma.categoryBudget.upsert({
+        where: {
+          categoryId_periodStart: {
+            categoryId: suggestion.categoryId,
+            periodStart,
+          },
+        },
+        create: {
+          categoryId: suggestion.categoryId,
+          periodStart,
+          amountCents,
+          isFixed: true,
+          dueDay: suggestion.dueDay,
+          estimated: suggestion.estimated,
+        },
+        // Only the bill flags. An existing row for this period already holds an
+        // amount someone chose, and pinning is not an edit of that amount.
+        update: {
+          isFixed: true,
+          dueDay: suggestion.dueDay,
+          estimated: suggestion.estimated,
+        },
+      });
+    });
+
+    await prisma.$transaction(writes);
+    return { ok: true, pinned: writes.length };
+  } catch (error) {
+    const result = failed("pinDetectedBills", error);
+    return { ok: false, error: result.ok ? "" : result.error };
+  }
+}
+
 export type MonthEndChoice = "keep" | "carry" | "match";
 
 export type MonthEndDecision = {
