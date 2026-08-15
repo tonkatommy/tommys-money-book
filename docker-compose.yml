@@ -51,6 +51,13 @@ services:
     environment:
       # Inside the compose network the db's hostname is its service name.
       DATABASE_URL: postgresql://${POSTGRES_USER:-moneybook}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-moneybook}
+      # Not required here with `:?` — requireSecret() in src/lib/secrets.ts
+      # already fails loudly at request time if neither the plain var nor the
+      # _FILE path is set, and forcing it here would break the _FILE-only case.
+      APP_PASSWORD: ${APP_PASSWORD:-}
+      APP_PASSWORD_FILE: ${APP_PASSWORD_FILE:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      SESSION_SECRET_FILE: ${SESSION_SECRET_FILE:-}
     ports:
       - "3000:3000"
 
