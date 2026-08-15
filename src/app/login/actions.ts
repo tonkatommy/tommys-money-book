@@ -28,6 +28,10 @@ export async function login(
     return { ok: false, error: "Incorrect password." };
   }
   const next = sanitizeNextPath(formData.get("next")?.toString());
+
+  try {
+    if (!checkPassword(password)) {
+      return { ok: false, error: "Incorrect password." };
     }
 
     const cookieStore = await cookies();
