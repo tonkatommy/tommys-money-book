@@ -23,7 +23,8 @@ export function proxy(request: NextRequest) {
   if (verifySession(cookie)) return NextResponse.next();
 
   const loginUrl = new URL("/login", request.url);
-  loginUrl.searchParams.set("next", pathname);
+  const next = request.nextUrl.pathname + request.nextUrl.search;
+  loginUrl.searchParams.set("next", next);
   return NextResponse.redirect(loginUrl);
 }
 
