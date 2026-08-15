@@ -24,11 +24,10 @@ export async function login(
   formData: FormData,
 ): Promise<LoginState> {
   const password = String(formData.get("password") ?? "");
+  if (password.length > 1024) {
+    return { ok: false, error: "Incorrect password." };
+  }
   const next = sanitizeNextPath(formData.get("next")?.toString());
-
-  try {
-    if (!checkPassword(password)) {
-      return { ok: false, error: "Incorrect password." };
     }
 
     const cookieStore = await cookies();
