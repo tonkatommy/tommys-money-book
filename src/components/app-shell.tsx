@@ -14,7 +14,7 @@
 import type { ReactNode } from "react";
 import type { Book } from "@/generated/prisma/client";
 import { BottomNav, BookToggle, SideNav } from "@/components/ui/nav";
-import { ButtonLink } from "@/components/ui/primitives";
+import { Badge, ButtonLink } from "@/components/ui/primitives";
 import { logout } from "@/app/login/actions";
 import type { PayPeriod } from "@/lib/budget/period";
 
@@ -24,6 +24,7 @@ export function AppShell({
   period,
   basePath,
   splitFortnightly = false,
+  lockBook = false,
   children,
 }: {
   /** Which nav item is current — see NAV in components/ui/nav.tsx. */
@@ -33,6 +34,15 @@ export function AppShell({
   /** Path the book toggle links back to, so switching stays on this screen. */
   basePath: string;
   splitFortnightly?: boolean;
+  /**
+   * This screen's book is a property of the record it shows, not a choice.
+   *
+   * A category drilldown is reached by id, and that id already determines the
+   * book — so the toggle has nothing to toggle. Rendering it anyway leaves a
+   * control that looks live and does nothing when pressed, which is worse than
+   * not offering it.
+   */
+  lockBook?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -91,7 +101,13 @@ export function AppShell({
               flexWrap: "wrap",
             }}
           >
-            <BookToggle value={book} basePath={basePath} />
+            {lockBook ? (
+              <Badge tone="neutral">
+                {book === "BUSINESS" ? "Business" : "Personal"} book
+              </Badge>
+            ) : (
+              <BookToggle value={book} basePath={basePath} />
+            )}
 
             {/* Wide only: the bottom tab bar already carries Sync below 768px,
                 so this would be a second route to the same screen.

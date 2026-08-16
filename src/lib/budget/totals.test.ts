@@ -101,6 +101,52 @@ describe("budgetTotals", () => {
     expect(totals.projectedDeltaCents).toBe(72_000 - totals.projectedCents);
   });
 
+  it("projects a paid bill at what it cost, not what it was budgeted", () => {
+    // The failure this guards against is silent and one-directional. An
+    // estimated bill budgeted at $967 that arrives at $2,899 finishes $1,932
+    // over, and a projection built from the budget would never say so — it
+    // would report the period landing exactly on target while the money had
+    // already gone.
+    const totals = budgetTotals(
+      [
+        line({ spentCents: 0, budgetCents: 0 }),
+        line({
+          categoryId: "rates",
+          name: "Rental — Rates",
+          budgetCents: 96_700,
+          spentCents: 289_983,
+          isFixed: true,
+          paid: true,
+        }),
+      ],
+      100_000,
+      period,
+    );
+
+    expect(totals.projectedCents).toBe(289_983);
+    expect(totals.projectedDeltaCents).toBe(96_700 - 289_983);
+  });
+
+  it("projects an unpaid bill at its budget — it hasn't happened yet", () => {
+    const totals = budgetTotals(
+      [
+        line({ spentCents: 0, budgetCents: 0 }),
+        line({
+          categoryId: "rent",
+          name: "Home Rent",
+          budgetCents: 104_000,
+          spentCents: 0,
+          isFixed: true,
+          paid: false,
+        }),
+      ],
+      100_000,
+      period,
+    );
+
+    expect(totals.projectedCents).toBe(104_000);
+  });
+
   it("does not project from a single day's spending", () => {
     // On day 1 a $200 shop would project to $6,200 for the month. "At this
     // rate" is not yet a rate, so the projection falls back to the budget.

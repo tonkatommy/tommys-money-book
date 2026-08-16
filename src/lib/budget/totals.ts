@@ -98,7 +98,20 @@ export function budgetTotals(
     period.dayOfPeriod > 1
       ? Math.round((flexSpentCents / period.dayOfPeriod) * period.daysInPeriod)
       : flexBudgetCents;
-  const projectedCents = projectedFlexCents + sum(fixed, (l) => l.budgetCents);
+
+  // A fixed bill that has already landed contributes what it ACTUALLY cost,
+  // not what it was budgeted. Using the budget for a paid bill makes the
+  // projection understate exactly the overspends that hurt most: an estimated
+  // bill budgeted at $967 that arrived at $2,899 would finish $1,932 over and
+  // the projection would never say so. Unpaid bills still contribute their
+  // budget, because that is the best available guess at what is coming.
+  //
+  // `paid` means "anything has landed", which is the same threshold
+  // fixedRemainingCents uses to drop a bill from safe-to-spend — the feed
+  // cannot tell a part payment from a full one, and the two figures agreeing
+  // matters more than either guessing differently.
+  const projectedCents =
+    projectedFlexCents + sum(fixed, (l) => (l.paid ? l.spentCents : l.budgetCents));
 
   const safeCents = balanceCents - fixedRemainingCents - untouchedCents;
 
