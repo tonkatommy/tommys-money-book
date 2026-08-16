@@ -23,12 +23,37 @@ import {
 } from "@/lib/transactions/mutate";
 import { parseDateParam } from "@/lib/transactions/query";
 
-export type FormState = { ok: false; error: string } | undefined;
+export type FormState =
+  | {
+      ok: false;
+      error: string;
+      /**
+       * What was submitted, echoed back so a rejected save doesn't cost the
+       * reader the other five fields (spec §4c).
+       *
+       * This has to come back from the server rather than being left to the
+       * browser: React resets an uncontrolled input after a form action
+       * resolves, so `defaultValue` alone loses everything typed. The form
+       * pairs these with `attempt` as a `key` to force the remount that makes
+       * a new `defaultValue` take effect.
+       */
+      values?: Record<string, string>;
+      /** Increments per submit, so two identical failures still re-seed. */
+      attempt?: number;
+    }
+  | undefined;
 
 const UNAUTHORISED: FormState = {
   ok: false,
   error: "Your session has expired. Reload the page and sign in again.",
 };
+
+/** Every text field of a form, as strings, for echoing back on failure. */
+function submittedValues(formData: FormData, fields: string[]): Record<string, string> {
+  return Object.fromEntries(
+    fields.map((field) => [field, String(formData.get(field) ?? "")]),
+  );
+}
 
 /** An empty select means "no category", which is a real choice, not a missing one. */
 function categoryFrom(formData: FormData): string | null {
@@ -110,21 +135,29 @@ export async function setNotesAction(
  * that can drift apart.
  */
 export async function updateManualAction(
-  _previous: FormState,
+  previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const values = submittedValues(formData, [
+    "date",
+    "description",
+    "payee",
+    "amount",
+    "direction",
+  ]);
+  const attempt = (previous?.attempt ?? 0) + 1;
+  const reject = (error: string): FormState => ({ ok: false, error, values, attempt });
+
   if (!(await hasSession())) return UNAUTHORISED;
 
   const id = String(formData.get("id") ?? "");
-  if (!id) return { ok: false, error: "That transaction no longer exists." };
+  if (!id) return reject("That transaction no longer exists.");
 
   const date = parseDateParam(String(formData.get("date") ?? ""));
-  if (!date) return { ok: false, error: "Give it a date as YYYY-MM-DD." };
+  if (!date) return reject("Give it a date as YYYY-MM-DD.");
 
   const amountCents = parseAmountToCents(formData.get("amount"));
-  if (amountCents === null) {
-    return { ok: false, error: "That amount is not a number." };
-  }
+  if (amountCents === null) return reject("That amount is not a number.");
 
   const direction = formData.get("direction") === "in" ? "in" : "out";
 
@@ -135,7 +168,7 @@ export async function updateManualAction(
     amountCents: signedAmountCents(amountCents, direction),
     notes: String(formData.get("notes") ?? "") || null,
   });
-  if (!result.ok) return { ok: false, error: result.error };
+  if (!result.ok) return reject(result.error);
 
   revalidatePath(`/transactions/${id}`);
   revalidatePath("/transactions");
@@ -152,22 +185,33 @@ export async function updateManualAction(
  * path returns nothing.
  */
 export async function createManualAction(
-  _previous: FormState,
+  previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const values = submittedValues(formData, [
+    "book",
+    "date",
+    "description",
+    "payee",
+    "amount",
+    "direction",
+    "categoryId",
+    "notes",
+  ]);
+  const attempt = (previous?.attempt ?? 0) + 1;
+  const reject = (error: string): FormState => ({ ok: false, error, values, attempt });
+
   if (!(await hasSession())) return UNAUTHORISED;
 
   const book = formData.get("book") === "BUSINESS" ? "BUSINESS" : "PERSONAL";
 
   const date = parseDateParam(String(formData.get("date") ?? ""));
-  if (!date) return { ok: false, error: "Give it a date as YYYY-MM-DD." };
+  if (!date) return reject("Give it a date as YYYY-MM-DD.");
 
   const amountCents = parseAmountToCents(formData.get("amount"));
-  if (amountCents === null) {
-    return { ok: false, error: "That amount is not a number." };
-  }
+  if (amountCents === null) return reject("That amount is not a number.");
   if (amountCents === 0) {
-    return { ok: false, error: "A zero-dollar entry would not tell you anything." };
+    return reject("A zero-dollar entry would not tell you anything.");
   }
 
   const direction = formData.get("direction") === "in" ? "in" : "out";
@@ -181,7 +225,7 @@ export async function createManualAction(
     amountCents: signedAmountCents(amountCents, direction),
     notes: String(formData.get("notes") ?? "") || null,
   });
-  if (!result.ok) return { ok: false, error: result.error };
+  if (!result.ok) return reject(result.error);
 
   revalidatePath("/transactions");
   revalidatePath("/budget");

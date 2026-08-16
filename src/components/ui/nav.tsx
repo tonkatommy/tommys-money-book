@@ -26,6 +26,10 @@ export const NAV: NavItem[] = [
     label: "Transactions",
     short: "Txns",
   },
+  // Its own item rather than a link buried in Transactions: an unconfirmed
+  // transfer is money the budget is currently counting as income or spending,
+  // and a queue you can't see is a queue that doesn't get cleared.
+  { key: "transfers", href: "/transfers", label: "Transfers", short: "Pairs" },
   { key: "setup", href: "/budget/setup", label: "Set budget", short: "Set up" },
   { key: "review", href: "/budget/review", label: "Month end", short: "Close" },
   { key: "sync", href: "/sync", label: "Sync status", short: "Sync" },
