@@ -60,9 +60,9 @@ export default async function TransactionsPage({
   searchParams: Promise<RawSearchParams>;
 }) {
   const params = await searchParams;
-  const { period, settings } = await resolvePeriod(
-    typeof params.period === "string" ? params.period : undefined,
-  );
+  const periodParam =
+    typeof params.period === "string" ? params.period : undefined;
+  const { period, settings } = await resolvePeriod(periodParam);
 
   // The period is the default window, so it is passed in as the fallback the
   // parser uses when ?from/?to are absent.
@@ -93,8 +93,16 @@ export default async function TransactionsPage({
   const expenseCategories = options.categories.filter(
     (category) => category.kind === "EXPENSE",
   );
+  // Every link on this screen goes through here. The context is what stops a
+  // link quietly changing the view it links from: `omitDates` keeps the
+  // period-derived dates out of the URL, so clicking Next doesn't read back as
+  // "custom range chosen" and drop the budget annotation, and `period` keeps a
+  // reader who is looking at an earlier period from being returned to this one.
   const query = (overrides: Partial<TransactionFilters>): string =>
-    `/transactions?${filtersToQuery(filters, overrides)}`;
+    `/transactions?${filtersToQuery(filters, overrides, {
+      omitDates: usingPeriod,
+      period: periodParam,
+    })}`;
 
   return (
     <AppShell
@@ -129,6 +137,14 @@ export default async function TransactionsPage({
           <form className="ds-filtergrid" method="get" action="/transactions">
             {filters.book === "BUSINESS" && (
               <input type="hidden" name="book" value="BUSINESS" />
+            )}
+
+            {/* A GET form submits only its own fields, so anything not
+                represented here is dropped on Apply. The period is not a filter
+                and has no control, but losing it would return a reader looking
+                at July to the current period the moment they typed a search. */}
+            {periodParam && (
+              <input type="hidden" name="period" value={periodParam} />
             )}
 
             <label>

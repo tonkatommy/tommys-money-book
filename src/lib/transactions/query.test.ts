@@ -158,4 +158,35 @@ describe("filtersToQuery", () => {
   it("applies overrides, which is what pagination links are", () => {
     expect(filtersToQuery(base, { page: 2 })).toContain("page=2");
   });
+
+  it("omits the dates when they came from the period, not the reader", () => {
+    // The bug this pins: a pagination link that spells out the period's dates
+    // makes the NEXT request see ?from/?to and conclude the reader chose a
+    // custom range — which hides the budget annotation and shows the custom
+    // range notice, just from clicking Next. Absence is what means "period".
+    const query = filtersToQuery(base, { page: 2 }, { omitDates: true });
+
+    expect(query).not.toContain("from=");
+    expect(query).not.toContain("to=");
+    expect(query).toContain("page=2");
+  });
+
+  it("carries the period through, so a link doesn't jump you to the current one", () => {
+    const query = filtersToQuery(base, { page: 2 }, {
+      omitDates: true,
+      period: "2026-06-20",
+    });
+
+    expect(query).toContain("period=2026-06-20");
+  });
+
+  it("still emits dates for a genuinely custom range", () => {
+    const custom = parseTransactionFilters(
+      { from: "2025-07-01", to: "2025-07-31" },
+      AUGUST,
+    );
+
+    expect(filtersToQuery(custom)).toContain("from=2025-07-01");
+    expect(filtersToQuery(custom)).toContain("to=2025-07-31");
+  });
 });

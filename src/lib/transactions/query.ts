@@ -113,6 +113,22 @@ export function parseTransactionFilters(
   };
 }
 
+/** Everything a link has to carry that isn't a filter. */
+export type QueryContext = {
+  /**
+   * Leave `from`/`to` out of the URL.
+   *
+   * Set when the dates in `filters` came from the pay period rather than from
+   * the reader. Emitting them would make the NEXT request see `?from`/`?to`
+   * and conclude a custom range was chosen — which silently drops the budget
+   * annotation and shows the "custom date range" notice, just from clicking
+   * Next. The absence of the parameters is what means "the period".
+   */
+  omitDates?: boolean;
+  /** `?period=` if the reader is looking at a period other than the current one. */
+  period?: string;
+};
+
 /**
  * Rebuild a query string from filters.
  *
@@ -120,22 +136,31 @@ export function parseTransactionFilters(
  * post-mutation redirect, so a filtered view survives every one of them. Empty
  * and default values are omitted, which keeps the common URL short enough to
  * read.
+ *
+ * Every link on the screen goes through here, so anything this drops is
+ * silently dropped by paging, by "show only those", and by every filter
+ * change — which is why `period` is threaded through rather than left to the
+ * caller to remember.
  */
 export function filtersToQuery(
   filters: TransactionFilters,
   overrides: Partial<TransactionFilters> = {},
+  context: QueryContext = {},
 ): string {
   const merged = { ...filters, ...overrides };
   const params = new URLSearchParams();
   const iso = (date: Date): string => date.toISOString().slice(0, 10);
 
   if (merged.book === "BUSINESS") params.set("book", "BUSINESS");
+  if (context.period) params.set("period", context.period);
   if (merged.accountId) params.set("account", merged.accountId);
   if (merged.categoryId) params.set("category", merged.categoryId);
   if (merged.uncategorised) params.set("uncategorised", "1");
   if (merged.q) params.set("q", merged.q);
-  params.set("from", iso(merged.from));
-  params.set("to", iso(merged.to));
+  if (!context.omitDates) {
+    params.set("from", iso(merged.from));
+    params.set("to", iso(merged.to));
+  }
   if (merged.page > 1) params.set("page", String(merged.page));
 
   return params.toString();
@@ -198,31 +223,39 @@ export async function queryTransactions(
 ): Promise<TransactionPage> {
   const where = whereFor(filters);
 
-  const [total, uncategorisedTotal, rows] = await Promise.all([
+  const [total, uncategorisedTotal] = await Promise.all([
     prisma.transaction.count({ where }),
     prisma.transaction.count({ where: { ...where, categoryId: null } }),
-    prisma.transaction.findMany({
-      where,
-      // `id` breaks the tie so paging is stable: `date` alone is a bare date
-      // with dozens of rows sharing a value, and an unstable sort can show the
-      // same transaction on two pages and skip another entirely.
-      orderBy: [{ date: "desc" }, { id: "desc" }],
-      skip: (filters.page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-      select: {
-        id: true,
-        date: true,
-        description: true,
-        payee: true,
-        amountCents: true,
-        notes: true,
-        source: true,
-        transferPairId: true,
-        account: { select: { name: true } },
-        category: { select: { id: true, name: true, book: true } },
-      },
-    }),
   ]);
+
+  // Clamped, so a stale `?page=99` shows the last page rather than an empty
+  // list captioned "Page 99 of 3". The counts have to be resolved before the
+  // rows to do it, which costs a round trip and buys never rendering a page
+  // that says there are results and then shows none.
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = Math.min(Math.max(1, filters.page), pageCount);
+
+  const rows = await prisma.transaction.findMany({
+    where,
+    // `id` breaks the tie so paging is stable: `date` alone is a bare date
+    // with dozens of rows sharing a value, and an unstable sort can show the
+    // same transaction on two pages and skip another entirely.
+    orderBy: [{ date: "desc" }, { id: "desc" }],
+    skip: (page - 1) * PAGE_SIZE,
+    take: PAGE_SIZE,
+    select: {
+      id: true,
+      date: true,
+      description: true,
+      payee: true,
+      amountCents: true,
+      notes: true,
+      source: true,
+      transferPairId: true,
+      account: { select: { name: true } },
+      category: { select: { id: true, name: true, book: true } },
+    },
+  });
 
   return {
     rows: rows.map((row) => ({
@@ -240,8 +273,10 @@ export async function queryTransactions(
       transferPairId: row.transferPairId,
     })),
     total,
-    page: filters.page,
-    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    // The clamped page, not the requested one — the pager renders this, so an
+    // out-of-range request has to report where it actually landed.
+    page,
+    pageCount,
     uncategorisedTotal,
   };
 }
