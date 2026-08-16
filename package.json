@@ -17,6 +17,7 @@
     "sync:daily": "tsx src/scripts/sync-daily.ts",
     "akahu:probe": "tsx src/scripts/akahu-probe.ts",
     "accounts:map": "tsx src/scripts/accounts-map.ts",
+    "accounts:seed-cash": "tsx src/scripts/accounts-seed-cash.ts",
     "categories:discover": "tsx src/scripts/categories-discover.ts",
     "categories:seed": "tsx src/scripts/categories-seed.ts",
     "categories:apply": "tsx src/scripts/categories-apply.ts",
