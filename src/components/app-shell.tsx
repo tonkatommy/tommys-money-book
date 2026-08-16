@@ -23,6 +23,7 @@ export function AppShell({
   book,
   period,
   basePath,
+  preserveQuery,
   splitFortnightly = false,
   lockBook = false,
   children,
@@ -33,6 +34,13 @@ export function AppShell({
   period: PayPeriod;
   /** Path the book toggle links back to, so switching stays on this screen. */
   basePath: string;
+  /**
+   * Query string the book toggle carries across the switch.
+   *
+   * The screen decides, because only it knows which of its parameters are ids
+   * belonging to one book. See `bookAgnosticQuery` in lib/transactions/query.ts.
+   */
+  preserveQuery?: string;
   splitFortnightly?: boolean;
   /**
    * This screen's book is a property of the record it shows, not a choice.
@@ -106,7 +114,11 @@ export function AppShell({
                 {book === "BUSINESS" ? "Business" : "Personal"} book
               </Badge>
             ) : (
-              <BookToggle value={book} basePath={basePath} />
+              <BookToggle
+                value={book}
+                basePath={basePath}
+                preserve={preserveQuery}
+              />
             )}
 
             {/* Wide only: the bottom tab bar already carries Sync below 768px,

@@ -41,6 +41,7 @@ import { formatNZD } from "@/lib/money";
 import { nzDate } from "@/lib/budget/period";
 import { getBudgetView, resolvePeriod } from "@/lib/budget/query";
 import {
+  bookAgnosticQuery,
   filtersToQuery,
   getFilterOptions,
   parseTransactionFilters,
@@ -110,6 +111,10 @@ export default async function TransactionsPage({
       book={filters.book}
       period={period}
       basePath="/transactions"
+      preserveQuery={bookAgnosticQuery(filters, {
+        omitDates: usingPeriod,
+        period: periodParam,
+      })}
       splitFortnightly={settings.splitFortnightly}
     >
       <div className="mb-stack">

@@ -128,14 +128,25 @@ export function BottomNav({ active, book }: { active: string; book: Book }) {
   );
 }
 
-/** Personal / Business segmented control, as two links. */
+/**
+ * Personal / Business segmented control, as two links.
+ *
+ * `preserve` is the query string to carry across the switch — the caller
+ * decides what still means something in the other book, because only it knows
+ * which of its parameters are ids scoped to one set of books. Omitted, the
+ * switch lands on the screen's default view.
+ */
 export function BookToggle({
   value,
   basePath,
+  preserve,
 }: {
   value: Book;
   basePath: string;
+  preserve?: string;
 }) {
+  const href = preserve ? `${basePath}?${preserve}` : basePath;
+
   const options: { key: Book; label: string; dot: string }[] = [
     { key: "PERSONAL", label: "Personal", dot: "var(--book-personal)" },
     { key: "BUSINESS", label: "Business", dot: "var(--book-business)" },
@@ -157,7 +168,7 @@ export function BookToggle({
         return (
           <Link
             key={option.key}
-            href={withBook(basePath, option.key)}
+            href={withBook(href, option.key)}
             aria-current={isActive ? "true" : undefined}
             style={{
               display: "flex",

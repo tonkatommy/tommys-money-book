@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { utcDate } from "@/lib/budget/period";
 import {
+  bookAgnosticQuery,
   currentMonth,
   filtersToQuery,
   parseDateParam,
@@ -180,6 +181,15 @@ describe("filtersToQuery", () => {
     expect(query).toContain("period=2026-06-20");
   });
 
+  it("omits the book when the link's purpose is to change it", () => {
+    // withBook leaves PERSONAL implicit, so a book=BUSINESS left in the string
+    // would survive a switch to personal and the toggle would appear dead.
+    const business = parseTransactionFilters({ book: "BUSINESS" }, AUGUST);
+
+    expect(filtersToQuery(business)).toContain("book=BUSINESS");
+    expect(filtersToQuery(business, {}, { omitBook: true })).not.toContain("book=");
+  });
+
   it("still emits dates for a genuinely custom range", () => {
     const custom = parseTransactionFilters(
       { from: "2025-07-01", to: "2025-07-31" },
@@ -188,5 +198,54 @@ describe("filtersToQuery", () => {
 
     expect(filtersToQuery(custom)).toContain("from=2025-07-01");
     expect(filtersToQuery(custom)).toContain("to=2025-07-31");
+  });
+});
+
+describe("bookAgnosticQuery", () => {
+  const filters = parseTransactionFilters(
+    {
+      book: "BUSINESS",
+      account: "acc_personal",
+      category: "cat_personal",
+      q: "mitre",
+      uncategorised: "1",
+      page: "3",
+    },
+    AUGUST,
+  );
+
+  it("carries what still means something in the other book", () => {
+    const query = bookAgnosticQuery(filters);
+
+    expect(query).toContain("q=mitre");
+    expect(query).toContain("uncategorised=1");
+  });
+
+  it("drops the account and category, which belong to one book", () => {
+    // Carrying a personal account id into the business book matches nothing,
+    // so the reader gets an empty list that reads as missing data rather than
+    // as a filter that no longer applies.
+    const query = bookAgnosticQuery(filters);
+
+    expect(query).not.toContain("acc_personal");
+    expect(query).not.toContain("cat_personal");
+  });
+
+  it("resets the page — it indexes a result set that no longer exists", () => {
+    expect(bookAgnosticQuery(filters)).not.toContain("page=");
+  });
+
+  it("leaves the book out, so the toggle can set it", () => {
+    expect(bookAgnosticQuery(filters)).not.toContain("book=");
+  });
+
+  it("keeps the period and honours omitDates", () => {
+    const query = bookAgnosticQuery(filters, {
+      omitDates: true,
+      period: "2026-06-20",
+    });
+
+    expect(query).toContain("period=2026-06-20");
+    expect(query).not.toContain("from=");
   });
 });

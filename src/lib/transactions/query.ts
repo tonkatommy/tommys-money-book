@@ -127,6 +127,15 @@ export type QueryContext = {
   omitDates?: boolean;
   /** `?period=` if the reader is looking at a period other than the current one. */
   period?: string;
+  /**
+   * Leave `book` out.
+   *
+   * For links whose whole purpose is to change the book — the toggle adds it
+   * afterwards via `withBook`, and `withBook` leaves PERSONAL implicit, so a
+   * `book=BUSINESS` already in the string would survive a switch to personal
+   * and the toggle would do nothing.
+   */
+  omitBook?: boolean;
 };
 
 /**
@@ -151,7 +160,9 @@ export function filtersToQuery(
   const params = new URLSearchParams();
   const iso = (date: Date): string => date.toISOString().slice(0, 10);
 
-  if (merged.book === "BUSINESS") params.set("book", "BUSINESS");
+  if (!context.omitBook && merged.book === "BUSINESS") {
+    params.set("book", "BUSINESS");
+  }
   if (context.period) params.set("period", context.period);
   if (merged.accountId) params.set("account", merged.accountId);
   if (merged.categoryId) params.set("category", merged.categoryId);
@@ -164,6 +175,39 @@ export function filtersToQuery(
   if (merged.page > 1) params.set("page", String(merged.page));
 
   return params.toString();
+}
+
+/**
+ * The part of the current view that still means something in the other book.
+ *
+ * Switching book is not a filter change, so the window, the search text and
+ * the "needs a category" flag should survive it — being dumped back on the
+ * current period every time you glance at the business book is the whole
+ * complaint this answers.
+ *
+ * Account and category are dropped, and that is the substance of this
+ * function rather than an oversight. Both are ids belonging to one book: a
+ * personal account id matches nothing on the business side, so carrying it
+ * across produces an empty list that looks like missing data rather than a
+ * filter that no longer applies. The page resets too, because it is a
+ * position in a result set that no longer exists.
+ *
+ * Note what this deliberately is NOT: per-book memory. Restoring each book's
+ * last view would need state outside the URL — a cookie or sessionStorage —
+ * and this app puts filters in the query string precisely so a page is
+ * bookmarkable and the back button works. The browser history already gives
+ * the remembering for free: Personal → Business → Back is the previous
+ * personal view exactly, with no state to hold anywhere.
+ */
+export function bookAgnosticQuery(
+  filters: TransactionFilters,
+  context: QueryContext = {},
+): string {
+  return filtersToQuery(
+    filters,
+    { accountId: null, categoryId: null, page: 1 },
+    { ...context, omitBook: true },
+  );
 }
 
 /** The Prisma `where` for a set of filters. Shared by the page and the count. */
