@@ -91,7 +91,16 @@ export async function saveBudgetAction(
         isFixed && Number.isInteger(dueRaw) && dueRaw >= 1 && dueRaw <= 31
           ? dueRaw
           : null,
-      estimated: formData.get(`estimated:${categoryId}`) === "on",
+      // Gated on isFixed for the same reason as dueDay: "the amount varies" is
+      // a statement about a bill, and an ordinary category has nothing for it
+      // to vary from. Without the gate, unticking "bill" would leave the flag
+      // behind on a row that is no longer a bill at all.
+      //
+      // The field itself is a hidden input the row renders only when the flag
+      // is already set (see setup/forms.tsx). There is no control for it: the
+      // detector decides whether an amount varies, and the form's job is to
+      // carry that decision through a save rather than silently clear it.
+      estimated: isFixed && formData.get(`estimated:${categoryId}`) === "on",
     });
   }
 

@@ -17,7 +17,7 @@ import { DayBars, Figure, PaceBar, ScreenHead, Verdict } from "@/components/ui/d
 import { withBook } from "@/components/ui/nav";
 import { formatNZD, formatNZDWhole } from "@/lib/money";
 import { nzDate, shortDate } from "@/lib/budget/period";
-import { getCategoryDetail, parseBook, resolvePeriod } from "@/lib/budget/query";
+import { getCategoryDetail, resolvePeriod } from "@/lib/budget/query";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +36,13 @@ export default async function CategoryPage({
   if (!detail) notFound();
 
   const { category, line, transactions, series } = detail;
-  const book = parseBook(query.book ?? category.book);
+
+  // The category's own book, never `?book=`. A category id already determines
+  // its book, so a querystring that disagrees is either a stale link or a
+  // typo — and honouring it would wrap a personal category in the business
+  // shell, with the heading below saying "Personal book" inside it and every
+  // nav link sending you into the wrong ledger.
+  const book = category.book;
 
   const leftCents = line.budgetCents - line.spentCents;
   const over = leftCents < 0;
@@ -53,6 +59,7 @@ export default async function CategoryPage({
       period={period}
       basePath={`/budget/category/${id}`}
       splitFortnightly={settings.splitFortnightly}
+      lockBook
     >
       <div className="mb-stack">
         <ScreenHead

@@ -229,6 +229,20 @@ function CategoryRow({
           ariaLabel={`${category.name} budget`}
         />
 
+        {/* Carries the "amount varies" flag through a save. There is no
+            control for it — the detector decides whether a bill's amount moves
+            — but the whole form posts every category on every Save, so without
+            this the action would read the field as absent and clear a flag
+            nobody touched. Rendered only when set, which is exactly what an
+            unchecked checkbox would post. */}
+        {category.estimated && (
+          <input
+            type="hidden"
+            name={`estimated:${category.categoryId}`}
+            value="on"
+          />
+        )}
+
         <label
           className="mb-switch"
           title="A bill with a due date. Held out of the pace calculation."
