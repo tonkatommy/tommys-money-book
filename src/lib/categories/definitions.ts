@@ -457,7 +457,19 @@ export const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
     name: "Vehicle — Fuel",
     book: "PERSONAL",
     kind: "EXPENSE",
-    rules: [{ field: A, pattern: "fuel stations" }],
+    rules: [
+      { field: A, pattern: "fuel stations" },
+      {
+        field: D,
+        pattern: "gas helensvi",
+        direction: "OUT",
+        note:
+          "The local station, and Akahu never enriched a single one of its 20 " +
+          "rows. Truncated at twelve characters by ANZ, which is why the " +
+          "pattern stops mid-word. Distinct from 'asb helensvi' (the ATM) " +
+          "and the bare 'helensville' terminal, which are different payees.",
+      },
+    ],
   },
   {
     name: "Vehicle — Servicing & Parts",
@@ -499,6 +511,12 @@ export const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
       { field: D, pattern: "dr clayton chan", direction: "OUT" },
       { field: D, pattern: "mandie psych", direction: "OUT" },
       { field: D, pattern: "nwmc", direction: "OUT" },
+      {
+        field: D,
+        pattern: "acu anuk",
+        direction: "OUT",
+        note: "Acupuncture, Helensville — three visits at ~$100 each.",
+      },
     ],
   },
   {

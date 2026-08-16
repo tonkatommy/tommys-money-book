@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -17,17 +17,25 @@ export const metadata: Metadata = {
   description: "Personal and business bookkeeping, fed daily from Akahu.",
 };
 
+// `viewport-fit=cover` is what makes env(safe-area-inset-bottom) report a real
+// value — without it the bottom tab bar sits under the home indicator on an
+// iPhone. Colour scheme is declared so form controls and scrollbars render
+// dark; this app has no light theme.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  colorScheme: "dark",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en-NZ" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

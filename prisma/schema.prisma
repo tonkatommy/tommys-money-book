@@ -178,6 +178,7 @@ model Category {
 
   transactions Transaction[]
   rules        CategoryRule[]
+  budgets      CategoryBudget[]
 
   // Same category name can exist in both books ("Software" personal vs
   // business), but not twice within one book.
@@ -286,6 +287,67 @@ model Transaction {
   @@index([date])
   @@index([accountId, date])
   @@index([categoryId])
+}
+
+// How the pay period is cut. One row, id "singleton".
+//
+// The period runs anchor-day to anchor-day minus one — 20 Jul to 19 Aug —
+// rather than by calendar month, because Tommy is paid monthly on the 20th
+// and a calendar month splits every pay cycle in half. "How much is left
+// until payday?" is the question the whole budget answers, and a month
+// boundary in the middle of the cycle makes it unanswerable.
+model BudgetSettings {
+  id String @id @default("singleton")
+
+  // Day of the month payday lands on, and so the day a period starts.
+  // Configurable because the pay cycle is a fact about the employer.
+  anchorDay Int @default(20)
+
+  // Display only. The pay still arrives monthly; this halves the everyday
+  // budget so "safe to spend" shows one fortnight at a time instead of a
+  // month's money on the 21st.
+  splitFortnightly Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+}
+
+// What one category is allowed to spend in one pay period.
+//
+// The important design point is what is NOT here: there is no roll-forward
+// job. A period with no rows is not a zero budget — each category resolves to
+// its most recent row with `periodStart <= period start`, so a budget simply
+// continues until a human changes it. A scheduled task that copies budgets
+// forward would fail silently one morning and quietly zero the budget, and a
+// zero budget looks exactly like a disciplined month.
+model CategoryBudget {
+  id          String   @id @default(cuid())
+  categoryId  String
+  periodStart DateTime @db.Date // identifies the period; see BudgetSettings
+  amountCents Int
+
+  // A bill, not everyday spending: it arrives on a date whether you like it
+  // or not. Fixed categories are held out of the pace calculation and
+  // subtracted from "safe to spend" instead — pacing a mortgage payment
+  // evenly across a month is a meaningless number.
+  isFixed Boolean @default(false)
+  dueDay  Int? // day of the month the bill lands
+
+  // The amount varies (power, water). Shown as an estimate so a bill that
+  // comes in higher than budgeted doesn't read as overspending.
+  estimated Boolean @default(false)
+
+  // Month-end "carry the difference" — last period's under/overspend, folded
+  // into this period's allowance while `amountCents` stays the standing
+  // budget. Kept separate so carrying a surplus never quietly becomes the new
+  // normal budget.
+  carryoverCents Int @default(0)
+
+  note String?
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, periodStart])
+  @@index([periodStart])
 }
 
 // One row per sync attempt — the audit trail that makes "the sync silently

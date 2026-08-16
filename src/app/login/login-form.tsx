@@ -2,10 +2,10 @@
 
 // The one client island on the login page — needed for useActionState's
 // pending/error state. The form still works via a plain POST without JS
-// (progressive enhancement), same as the bulk-select island the design spec
-// calls for on /transactions.
+// (progressive enhancement), same as the budget forms.
 
 import { useActionState } from "react";
+import { Button, FormField } from "@/components/ui/primitives";
 import { login, type LoginState } from "./actions";
 
 export function LoginForm({ next }: { next: string }) {
@@ -15,35 +15,48 @@ export function LoginForm({ next }: { next: string }) {
   );
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form
+      action={formAction}
+      style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}
+    >
       <input type="hidden" name="next" value={next} />
 
-      <div>
-        <label
-          htmlFor="password"
-          className="block text-sm font-medium text-zinc-300"
-        >
-          Password
-        </label>
+      <FormField
+        label="Password"
+        htmlFor="password"
+        error={state?.error}
+        hint={
+          pending ? "Checking…" : "Set in the server environment as APP_PASSWORD."
+        }
+      >
         <input
+          className="mb-input"
           id="password"
           name="password"
           type="password"
+          autoComplete="current-password"
           required
           autoFocus
-          className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-zinc-500 focus:outline-none"
+          disabled={pending}
+          aria-invalid={state?.error ? true : undefined}
+          style={{
+            minHeight: 44,
+            fontFamily: "var(--font-mono)",
+            fontSize: "var(--text-base)",
+            letterSpacing: ".12em",
+            opacity: pending ? 0.6 : 1,
+          }}
         />
-      </div>
+      </FormField>
 
-      {state?.error && <p className="text-sm text-red-400">{state.error}</p>}
-
-      <button
+      <Button
         type="submit"
+        variant="primary"
         disabled={pending}
-        className="w-full rounded-md bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-white disabled:opacity-50"
+        style={{ width: "100%", minHeight: 44 }}
       >
         {pending ? "Signing in…" : "Sign in"}
-      </button>
+      </Button>
     </form>
   );
 }

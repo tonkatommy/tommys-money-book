@@ -54,3 +54,20 @@ export function formatNZD(cents: number): string {
     currency: "NZD",
   }).format(centsToDollars(cents));
 }
+
+/**
+ * The same, without the cents: -20000 -> "-$200".
+ *
+ * For budget figures specifically. A budget is a round decision — "$720 for
+ * groceries" — and rendering it as $720.00 next to an actual of $611.40
+ * invites the reader to compare digits that carry no information. Actuals
+ * keep their cents; targets don't have any.
+ */
+export function formatNZDWhole(cents: number): string {
+  return new Intl.NumberFormat("en-NZ", {
+    style: "currency",
+    currency: "NZD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(centsToDollars(cents));
+}
