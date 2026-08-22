@@ -47,6 +47,7 @@ export default async function ReviewPage({
       book={book}
       period={period}
       basePath="/budget/review"
+      preserveQuery={params.period ? `period=${params.period}` : undefined}
       splitFortnightly={settings.splitFortnightly}
     >
       <div className="mb-stack">

@@ -73,6 +73,7 @@ export default async function SetupPage({
       book={book}
       period={period}
       basePath="/budget/setup"
+      preserveQuery={params.period ? `period=${params.period}` : undefined}
       splitFortnightly={settings.splitFortnightly}
     >
       <div className="mb-stack">

@@ -42,6 +42,7 @@ export default async function BudgetPage({
       book={book}
       period={period}
       basePath="/budget"
+      preserveQuery={params.period ? `period=${params.period}` : undefined}
       splitFortnightly={settings.splitFortnightly}
     >
       {children}
