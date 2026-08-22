@@ -12,7 +12,9 @@ CRUSH.md
 QWEN.md
 
 # OpenAI Codex
-AGENTS.md
+# AGENTS.md is deliberately tracked: it is this repo's shared agent
+# instruction file, and an agent working from a clone (Copilot's coding agent,
+# any cloud session) can only read it if it is committed.
 .codex/
 
 # Aider
@@ -27,7 +29,9 @@ AGENTS.md
 .claude/**/*.log
 CLAUDE.local.md
 .claude/
-CLAUDE.md
+# CLAUDE.md is deliberately tracked: one line importing AGENTS.md, because
+# Claude Code reads CLAUDE.md and not AGENTS.md. Personal preferences live in
+# CLAUDE.local.md above, which stays ignored.
 
 # Gemini CLI
 gemini-debug.log
@@ -303,4 +307,3 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
-/CLAUDE.md
