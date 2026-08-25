@@ -162,7 +162,7 @@ export async function rollingBusinessTurnoverCents(
       // Both ends are inclusive UTC-midnight calendar dates, so this compares
       // like with like against `@db.Date`.
       date: { gte: from, lte: to },
-      category: { taxTag: "BIZ_INCOME" },
+      category: { taxTag: "BIZ_INCOME", book: "BUSINESS" },
     },
     _sum: { amountCents: true },
     _count: { _all: true },
