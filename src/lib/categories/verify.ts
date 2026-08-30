@@ -6,6 +6,7 @@
 // number handed to the accountant is simply not true.
 
 import type { PrismaClient, TaxTag } from "@/generated/prisma/client";
+import { daysInMonth, nzToday, utcDate } from "@/lib/budget/period";
 
 export type BookMismatch = {
   transactionId: string;
@@ -92,6 +93,50 @@ export async function taxTagTotals(
   );
 }
 
+const DAY_MS = 86_400_000;
+
+/** The rolling 12-month window the GST monitor sums over. Both ends inclusive. */
+export type GstWindow = { from: Date; to: Date };
+
+/**
+ * The 12 months ending on `asAt`, as UTC-midnight calendar dates.
+ *
+ * Pulled out of the query and exported because this, not the sum, is where
+ * the figure can go quietly wrong, and it is the only part of the monitor
+ * that can be tested without a database.
+ *
+ * Two things it exists to get right:
+ *
+ * 1. `asAt` is a CALENDAR DATE, not an instant. `Transaction.date` is a bare
+ *    `@db.Date` that Postgres returns at UTC midnight, and NZ runs 12–13
+ *    hours ahead of UTC. Compare those stored dates against `new Date()` and
+ *    from NZ midnight until NZ noon today's date has not arrived in UTC yet,
+ *    so today's sales are outside the window — and the far end of the window
+ *    slides with the clock too, which means the answer at 9am and the answer
+ *    at 9pm are sums over different 12 months. So "today" resolves in
+ *    Pacific/Auckland via `nzToday` first (invariant 5).
+ *
+ * 2. A year back from 29 February lands on a date that does not exist.
+ *    `setFullYear` on a mutated copy rolls it silently into 1 March; the
+ *    clamped `utcDate` arithmetic `period.ts` uses for short anchor days
+ *    gives 28 February instead, and the window keeps its stated length.
+ *
+ * `from` is the first day INCLUDED — the day after the same date a year
+ * earlier — so `from`..`to` is a full 12 months with no day counted twice
+ * across consecutive windows.
+ */
+export function gstWindow(asAt: Date = nzToday()): GstWindow {
+  const year = asAt.getUTCFullYear() - 1;
+  const month = asAt.getUTCMonth();
+  const sameDateLastYear = utcDate(
+    year,
+    month,
+    Math.min(asAt.getUTCDate(), daysInMonth(year, month)),
+  );
+
+  return { from: new Date(sameDateLastYear.getTime() + DAY_MS), to: asAt };
+}
+
 /**
  * Rolling 12-month business turnover — the GST registration monitor.
  *
@@ -103,19 +148,31 @@ export async function taxTagTotals(
  * The $60,000 threshold is a long way off, but the number has to be right
  * *before* it matters, not after — registration is triggered by turnover in
  * the past 12 months, so the first time anyone looks at this figure in anger
- * it will already be describing history.
+ * it will already be describing history and cannot be recomputed from a
+ * better clock. Hence `gstWindow` above.
  */
 export async function rollingBusinessTurnoverCents(
   prisma: PrismaClient,
-  asAt: Date = new Date(),
+  asAt: Date = nzToday(),
 ): Promise<{ netCents: number; from: Date; to: Date; transactions: number }> {
-  const from = new Date(asAt);
-  from.setFullYear(from.getFullYear() - 1);
+  const { from, to } = gstWindow(asAt);
 
   const result = await prisma.transaction.aggregate({
     where: {
-      date: { gt: from, lte: asAt },
-      category: { taxTag: "BIZ_INCOME" },
+      // Both ends are inclusive UTC-midnight calendar dates, so this compares
+      // like with like against `@db.Date`.
+      date: { gte: from, lte: to },
+      // `book` looks redundant next to `BIZ_INCOME` and is not. All three
+      // BIZ_INCOME categories are BUSINESS today, so this changes nothing on
+      // correct data — it is here for the day one isn't. A PERSONAL category
+      // tagged BIZ_INCOME would pass every guard the app has, because
+      // `findBookMismatches` above compares a transaction's ACCOUNT book
+      // against its CATEGORY book and both would agree; nothing checks a
+      // category's tag against its own book. The result would be salary
+      // counted as sales, pushing a $982 turnover figure toward a $60,000
+      // threshold that triggers a real registration obligation.
+      // Do not delete this as duplication.
+      category: { taxTag: "BIZ_INCOME", book: "BUSINESS" },
     },
     _sum: { amountCents: true },
     _count: { _all: true },
@@ -125,6 +182,6 @@ export async function rollingBusinessTurnoverCents(
     netCents: result._sum.amountCents ?? 0,
     transactions: result._count._all,
     from,
-    to: asAt,
+    to,
   };
 }

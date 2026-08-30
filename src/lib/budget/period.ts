@@ -52,8 +52,14 @@ export function utcDate(year: number, month: number, day: number): Date {
   return new Date(Date.UTC(year, month, day));
 }
 
-/** Days in a given month. `month` is 0-based. */
-function daysInMonth(year: number, month: number): number {
+/**
+ * Days in a given month. `month` is 0-based.
+ *
+ * Exported because it is the clamp every "same day, different month" sum in
+ * the app needs, and a second copy elsewhere is a second thing to get wrong
+ * in February.
+ */
+export function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 }
 

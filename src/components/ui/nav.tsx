@@ -14,7 +14,7 @@ export type NavItem = {
   key: string;
   href: string;
   label: string;
-  /** Shorter label for the bottom tab bar, where five items share the width. */
+  /** Shorter label for the bottom tab bar, where seven items share the width. */
   short: string;
 };
 
@@ -30,6 +30,10 @@ export const NAV: NavItem[] = [
   // transfer is money the budget is currently counting as income or spending,
   // and a queue you can't see is a queue that doesn't get cleared.
   { key: "transfers", href: "/transfers", label: "Transfers", short: "Pairs" },
+  // The tax surface, and the second date regime: FY and rolling twelve months
+  // rather than the pay period every screen above it runs on. Its own item
+  // because the figures it carries are the ones read out to an accountant.
+  { key: "reports", href: "/reports", label: "Reports", short: "Reports" },
   { key: "setup", href: "/budget/setup", label: "Set budget", short: "Set up" },
   { key: "review", href: "/budget/review", label: "Month end", short: "Close" },
   { key: "sync", href: "/sync", label: "Sync status", short: "Sync" },

@@ -101,7 +101,7 @@ One thing not to lose when rebuilding categories from scratch: the old COA encod
 - **PostgreSQL** — you know it, and financial data wants a relational schema with constraints (e.g. a CHECK that a business transaction can't carry a PEX category).
 - **Prisma ORM** — schema-as-code, generated types, and migrations. As a junior dev, Prisma's migration workflow teaches you how schema changes are managed properly in real teams.
 - **Docker Compose** — three services (app, db, sync worker) plus a backup job. Matches your homelab experience.
-- **Charts:** Recharts (simple, React-native API).
+- **Charts:** none. Recharts was the original choice and was reconsidered in Phase 3c (24/08/2026) when the first charting need actually arrived. Declined: every screen in this app is a server component that works with JavaScript disabled, and Recharts is a client component, so it would have been the first client JS in the app in exchange for a bar chart on a screen whose whole value is the numbers. Breakdowns render as ranked bar tables built from the existing design-system primitives. Revisit only if a genuinely chart-shaped question appears, not for the next breakdown.
 - **Auth:** a single shared password/session is enough for LAN-only single-user (see §7). Don't build a user system you don't need.
 
 ---
@@ -213,6 +213,8 @@ Deliverable: baseline fully categorised, auto-categorisation rules live for the 
 - Monthly breakdown view (the Financial Breakdown sheet, live).
 
 **This is the go-live point.** The Excel tracker freezes here as the pre-baseline archive.
+
+**Split into 3a, 3b and 3c in delivery.** 3a shipped auth and the transaction list (PRs #10 and #15); 3b shipped the budget (PRs #14 and #17) and redefined "dashboard" as the pay-period budget surface rather than a reporting screen, on the grounds that a dashboard which shows what you spent without saying what you *meant* to spend is a report rather than a tool. That was the right call and it left the four reporting items above unbuilt, which is what Phase 3c is: the GST turnover monitor, FY-to-date per book, the category breakdown and the monthly breakdown, in a `/reports` section. Specs: `docs/superpowers/specs/2026-08-02-phase-3-transactions-design.md`, `2026-08-15-phase-3b-budget-design.md`, `2026-08-24-phase-3c-reports-design.md`. Phase 3 is complete against this plan when 3c lands.
 
 ### Phase 4 — Reports and year-end (ongoing)
 
