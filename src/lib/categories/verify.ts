@@ -162,6 +162,16 @@ export async function rollingBusinessTurnoverCents(
       // Both ends are inclusive UTC-midnight calendar dates, so this compares
       // like with like against `@db.Date`.
       date: { gte: from, lte: to },
+      // `book` looks redundant next to `BIZ_INCOME` and is not. All three
+      // BIZ_INCOME categories are BUSINESS today, so this changes nothing on
+      // correct data — it is here for the day one isn't. A PERSONAL category
+      // tagged BIZ_INCOME would pass every guard the app has, because
+      // `findBookMismatches` above compares a transaction's ACCOUNT book
+      // against its CATEGORY book and both would agree; nothing checks a
+      // category's tag against its own book. The result would be salary
+      // counted as sales, pushing a $982 turnover figure toward a $60,000
+      // threshold that triggers a real registration obligation.
+      // Do not delete this as duplication.
       category: { taxTag: "BIZ_INCOME", book: "BUSINESS" },
     },
     _sum: { amountCents: true },
