@@ -22,7 +22,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { Book } from "@/generated/prisma/client";
-import { nzToday } from "@/lib/budget/period";
+import { nzDate, nzToday, utcDate } from "@/lib/budget/period";
 import { rollingBusinessTurnoverCents } from "@/lib/categories/verify";
 import { fyRangeEnd, fyRangeLabel, type FinancialYear } from "./fy";
 
@@ -203,5 +203,279 @@ export async function getReportsOverview(
     categories,
     quality,
     gst,
+  };
+}
+
+/* ==========================================================================
+   The category breakdown, and the monthly breakdown
+   ========================================================================== */
+
+/** `getReportsOverview` minus the GST card, plus the two sides split out. */
+export type CategoryBreakdown = {
+  fy: FinancialYear;
+  book: Book;
+  rangeEnd: Date;
+  rangeLabel: string;
+  /** Ranked by magnitude, largest first. Positive cents. */
+  income: CategoryTotal[];
+  expenses: CategoryTotal[];
+  incomeCents: number;
+  expensesCents: number;
+  netCents: number;
+  quality: DataQuality;
+};
+
+/**
+ * The `/reports/categories` read.
+ *
+ * Little more than `categoryTotals` split into its two sides, because the two
+ * sides are ranked and scaled independently on screen — a $60,000 salary and a
+ * $40 phone bill sharing one bar scale is a screen with one visible bar.
+ */
+export async function getCategoryBreakdown(
+  book: Book,
+  fy: FinancialYear,
+  now: Date = new Date(),
+): Promise<CategoryBreakdown> {
+  const today = nzToday(now);
+  const rangeEnd = fyRangeEnd(fy, today);
+
+  const [categories, quality] = await Promise.all([
+    categoryTotals(book, fy.start, rangeEnd),
+    dataQuality(book, fy.start, rangeEnd),
+  ]);
+
+  const income = categories.filter((category) => category.kind === "INCOME");
+  const expenses = categories.filter((category) => category.kind === "EXPENSE");
+
+  const sum = (rows: CategoryTotal[]): number =>
+    rows.reduce((total, row) => total + row.totalCents, 0);
+
+  const incomeCents = sum(income);
+  const expensesCents = sum(expenses);
+
+  return {
+    fy,
+    book,
+    rangeEnd,
+    rangeLabel: fyRangeLabel(fy, today),
+    income,
+    expenses,
+    incomeCents,
+    expensesCents,
+    netCents: incomeCents - expensesCents,
+    quality,
+  };
+}
+
+/**
+ * Month names in FY order, so the label comes from the bucket index.
+ *
+ * Not `shortDate` from `period.ts`, which formats a day within a month.
+ */
+const FY_MONTHS = [
+  "Apr", "May", "Jun", "Jul", "Aug", "Sep",
+  "Oct", "Nov", "Dec", "Jan", "Feb", "Mar",
+];
+
+/** One transaction, reduced to the three fields the bucketing needs. */
+export type MonthlyRow = {
+  /** The stored `@db.Date`, at UTC midnight. */
+  date: Date;
+  /** As stored: expenses negative. Flipped once, inside `bucketByMonth`. */
+  amountCents: number;
+  kind: "INCOME" | "EXPENSE";
+};
+
+export type MonthBucket = {
+  /** First of the month, UTC midnight. */
+  start: Date;
+  /** Last of the month, UTC midnight. */
+  end: Date;
+  /** "Aug 2026" */
+  label: string;
+  /** "01/08/2026 – 31/08/2026" — every figure prints its range (3c spec §2). */
+  range: string;
+  /** Positive cents. */
+  incomeCents: number;
+  /** Positive cents. */
+  expensesCents: number;
+  netCents: number;
+  transactions: number;
+  /** Entirely after the last day with data. Not zero spending — no data yet. */
+  future: boolean;
+  /** Contains the last day with data, so its figures are still moving. */
+  partial: boolean;
+};
+
+/**
+ * Twelve calendar-month buckets across one financial year.
+ *
+ * Pure, and therefore the only part of this file a unit test can reach — split
+ * out from its Prisma call the same way `gstWindow` is split out from
+ * `rollingBusinessTurnoverCents` in `categories/verify.ts`.
+ *
+ * The bucketing is TypeScript rather than SQL because twelve buckets over one
+ * year of rows does not justify a `date_trunc` and the codebase's only raw
+ * query, and a Prisma `groupBy` cannot produce a calendar month at all.
+ *
+ * Two things this guarantees that a reduce over the rows would not:
+ *
+ * - **Always twelve rows.** A month with no transactions is a zero row that
+ *   still renders. Building buckets from the data instead gives a table that
+ *   changes shape mid-year, where a missing August reads as an August nobody
+ *   has looked at rather than an August with nothing in it.
+ *
+ * - **Months past `rangeEnd` are marked `future`, not zeroed.** In the current
+ *   FY, February has not happened. A screen printing $0.00 against it is
+ *   asserting something it cannot know.
+ *
+ * The bucket index is arithmetic on the stored UTC-midnight date. No date
+ * parsing, no `new Date(string)`, nothing that could roll a short month
+ * forward — the same discipline `period.ts` applies to the pay anchor.
+ */
+export function bucketByMonth(
+  fy: FinancialYear,
+  rows: MonthlyRow[],
+  rangeEnd: Date,
+): MonthBucket[] {
+  const firstYear = fy.start.getUTCFullYear();
+  const firstMonth = fy.start.getUTCMonth();
+
+  const buckets: MonthBucket[] = Array.from({ length: 12 }, (_, index) => {
+    const start = utcDate(firstYear, firstMonth + index, 1);
+    // Day 0 of the next month is the last day of this one, so February comes
+    // out right in a leap year without a table of month lengths.
+    const end = utcDate(start.getUTCFullYear(), start.getUTCMonth() + 1, 0);
+
+    return {
+      start,
+      end,
+      label: `${FY_MONTHS[index]} ${start.getUTCFullYear()}`,
+      range: `${nzDate(start)} – ${nzDate(end)}`,
+      incomeCents: 0,
+      expensesCents: 0,
+      netCents: 0,
+      transactions: 0,
+      future: start.getTime() > rangeEnd.getTime(),
+      partial:
+        start.getTime() <= rangeEnd.getTime() &&
+        end.getTime() > rangeEnd.getTime(),
+    };
+  });
+
+  for (const row of rows) {
+    const index =
+      (row.date.getUTCFullYear() - firstYear) * 12 +
+      (row.date.getUTCMonth() - firstMonth);
+
+    // A row outside the FY is dropped rather than folded into the first or
+    // last bucket. The caller has already filtered on the FY bounds, so this
+    // only fires if the two ever disagree — and a total in the wrong month is
+    // much harder to spot than one that is missing.
+    const bucket = buckets[index];
+    if (!bucket) continue;
+
+    // The one flip, at the query boundary, matching `categoryTotals` above.
+    // A refund can still make a month's expenses net negative, and it should
+    // read that way rather than being clamped to zero.
+    if (row.kind === "INCOME") bucket.incomeCents += row.amountCents;
+    else bucket.expensesCents += -row.amountCents;
+
+    bucket.transactions += 1;
+  }
+
+  for (const bucket of buckets) {
+    bucket.netCents = bucket.incomeCents - bucket.expensesCents;
+  }
+
+  return buckets;
+}
+
+export type MonthlyBreakdown = {
+  fy: FinancialYear;
+  book: Book;
+  rangeEnd: Date;
+  rangeLabel: string;
+  /** Always twelve, April first. */
+  months: MonthBucket[];
+  incomeCents: number;
+  expensesCents: number;
+  netCents: number;
+  transactions: number;
+  quality: DataQuality;
+};
+
+/**
+ * The `/reports/months` read — the Financial Breakdown sheet, live.
+ *
+ * `findMany` rather than `groupBy`, because the grouping key is a calendar
+ * month and Prisma cannot group by one. One financial year of one book's
+ * categorised rows is a couple of thousand at most and three columns wide;
+ * the alternatives are twelve queries or the only raw SQL in the codebase.
+ */
+export async function getMonthlyBreakdown(
+  book: Book,
+  fy: FinancialYear,
+  now: Date = new Date(),
+): Promise<MonthlyBreakdown> {
+  const today = nzToday(now);
+  const rangeEnd = fyRangeEnd(fy, today);
+
+  const [rows, quality] = await Promise.all([
+    prisma.transaction.findMany({
+      where: {
+        date: { gte: fy.start, lte: rangeEnd },
+        // The same filter as `categoryTotals`, so the monthly figures and the
+        // category figures are the same money seen two ways. TRANSFER and
+        // OWNER fall out of it, which is what stops money moved between
+        // Tommy's own accounts showing up as a month's income.
+        category: { book, kind: { in: ["INCOME", "EXPENSE"] } },
+      },
+      select: {
+        date: true,
+        amountCents: true,
+        category: { select: { kind: true } },
+      },
+    }),
+    dataQuality(book, fy.start, rangeEnd),
+  ]);
+
+  const months = bucketByMonth(
+    fy,
+    rows.flatMap((row) =>
+      // The `where` above already requires a category, so this never drops a
+      // row in practice; it is here because the relation is nullable in the
+      // schema and a non-null assertion would be a claim the type cannot make.
+      row.category
+        ? [
+            {
+              date: row.date,
+              amountCents: row.amountCents,
+              kind: row.category.kind as "INCOME" | "EXPENSE",
+            },
+          ]
+        : [],
+    ),
+    rangeEnd,
+  );
+
+  const totalOf = (pick: (bucket: MonthBucket) => number): number =>
+    months.reduce((total, bucket) => total + pick(bucket), 0);
+
+  const incomeCents = totalOf((bucket) => bucket.incomeCents);
+  const expensesCents = totalOf((bucket) => bucket.expensesCents);
+
+  return {
+    fy,
+    book,
+    rangeEnd,
+    rangeLabel: fyRangeLabel(fy, today),
+    months,
+    incomeCents,
+    expensesCents,
+    netCents: incomeCents - expensesCents,
+    transactions: totalOf((bucket) => bucket.transactions),
+    quality,
   };
 }
