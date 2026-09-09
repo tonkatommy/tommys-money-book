@@ -163,8 +163,19 @@ export default async function ReportCategoriesPage({
         {/* Two cards, two RankedBars, two independent scales. Each side's
             bars are scaled against its own largest row, and each percentage
             is a share of its own side — mixing them would make every expense
-            a hairline next to a year of salary. */}
-        <div className="mb-grid mb-grid-split">
+            a hairline next to a year of salary.
+
+            Stacked, not side by side, for two reasons found on the device.
+            The sides are wildly uneven — 8 income categories against 34
+            expense ones — so columns leave two screenfuls of dead space
+            beside the shorter list. And a `1fr` grid track is
+            `minmax(auto, 1fr)`, whose floor is the item's min-content; a
+            category label is `white-space: nowrap` so it can ellipsize, which
+            makes its min-content contribution the FULL label text. At 375px
+            that forced the track to 385px inside a 339px container and
+            scrolled the whole page sideways. Full-width rows also give a name
+            like "Investment & KiwiSaver Withdrawals" somewhere to go. */}
+        <div className="mb-stack">
           <Card
             title="Money in"
             action={

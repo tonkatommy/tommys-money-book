@@ -169,10 +169,14 @@ export default async function ReportMonthsPage({
                     color: "var(--text-muted)",
                   }}
                 >
+                  {/* The literal range sits UNDER each month name rather than
+                      in a column of its own. As a column it was 155px of
+                      DD/MM/YYYY at phone width, which pushed In, Out and Net
+                      off the right edge — a table you have to scroll
+                      sideways to find any money in. The range still prints on
+                      every row, as §2 requires; it just reads as part of the
+                      month rather than competing with the figures. */}
                   <th style={cell}>Month</th>
-                  {/* The literal range, on every row. This is the phase's
-                      whole mitigation for carrying two date regimes. */}
-                  <th style={cell}>Range</th>
                   <th style={numeric}>In</th>
                   <th style={numeric}>Out</th>
                   <th style={numeric}>Net</th>
@@ -190,29 +194,30 @@ export default async function ReportMonthsPage({
                     }}
                   >
                     <td style={{ ...cell, whiteSpace: "nowrap" }}>
-                      {month.label}
-                      {month.partial && (
-                        <span
-                          style={{
-                            marginLeft: 8,
-                            fontSize: "var(--text-xs)",
-                            color: "var(--text-muted)",
-                          }}
-                        >
-                          so far
-                        </span>
-                      )}
-                    </td>
-                    <td
-                      className="mb-num"
-                      style={{
-                        ...cell,
-                        whiteSpace: "nowrap",
-                        fontSize: "var(--text-xs)",
-                        color: "var(--text-tertiary)",
-                      }}
-                    >
-                      {month.range}
+                      <div>
+                        {month.label}
+                        {month.partial && (
+                          <span
+                            style={{
+                              marginLeft: 8,
+                              fontSize: "var(--text-xs)",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            so far
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className="mb-num"
+                        style={{
+                          marginTop: 2,
+                          fontSize: "var(--text-xs)",
+                          color: "var(--text-tertiary)",
+                        }}
+                      >
+                        {month.range}
+                      </div>
                     </td>
 
                     {/* A future month is not a zero month. Printing $0.00
@@ -283,18 +288,19 @@ export default async function ReportMonthsPage({
                     fontWeight: "var(--weight-semibold)",
                   }}
                 >
-                  <td style={cell}>{fy.label}</td>
-                  <td
-                    className="mb-num"
-                    style={{
-                      ...cell,
-                      whiteSpace: "nowrap",
-                      fontSize: "var(--text-xs)",
-                      color: "var(--text-tertiary)",
-                      fontWeight: "var(--weight-medium)",
-                    }}
-                  >
-                    {view.rangeLabel}
+                  <td style={{ ...cell, whiteSpace: "nowrap" }}>
+                    <div>{fy.label}</div>
+                    <div
+                      className="mb-num"
+                      style={{
+                        marginTop: 2,
+                        fontSize: "var(--text-xs)",
+                        color: "var(--text-tertiary)",
+                        fontWeight: "var(--weight-medium)",
+                      }}
+                    >
+                      {view.rangeLabel}
+                    </div>
                   </td>
                   <td className="mb-num" style={numeric}>
                     {formatNZD(view.incomeCents)}
