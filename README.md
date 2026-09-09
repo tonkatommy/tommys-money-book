@@ -297,10 +297,12 @@ themselves against the rule set, and log every run.
 **82% categorised automatically** — 818 transfer legs paired and 1,382 matched
 by rule, leaving 487 in the review queue (about half of which are deliberate:
 transfer suggestions awaiting confirmation, and one payee stream that needs a
-human to split it). Rolling 12-month business turnover is $982.84 against the
-$60,000 GST threshold, and all four tax questions the IR3 needs — rental
-income and expenses, business income and expenses by type, home office
-eligible costs, GST turnover — are answerable from the tax tags.
+human to split it). Rolling 12-month business turnover is $822.50 as at
+09/09/2026 against the $60,000 GST threshold — a figure that moves every day,
+which is why the app now shows it live at `/reports` rather than leaving it
+in a document. All four tax questions the IR3 needs — rental income and
+expenses, business income and expenses by type, home office eligible costs,
+GST turnover — are answerable from the tax tags.
 
 Phase 2 overturned one of the plan's assumptions. It expected the category
 list to be built from Akahu's suggested categories; in reality only 32% of
