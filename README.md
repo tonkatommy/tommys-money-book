@@ -39,7 +39,7 @@ stack I work in.
 | ORM | Prisma — schema-as-code, typed client, migrations |
 | Bank feeds | Akahu personal app (read-only, free tier, daily refresh) |
 | Sync | Scheduled worker (node-cron) polling Akahu, deduping on transaction ID |
-| Charts | Recharts |
+| Charts | None — breakdowns are server-rendered bar tables (reasoning in the plan) |
 | Deployment | Docker Compose on a homelab, nightly `pg_dump` backups |
 
 ## Architecture
@@ -92,7 +92,10 @@ Design decisions worth noting:
   transactions late, and anchoring on run time would skip them permanently.
   Dedupe makes the overlap free.
 - **NZ financial year (01/04–31/03) is derived from the transaction date**, not
-  stored — one SQL expression used by every report.
+  stored. The bounds are computed in TypeScript (`src/lib/reports/fy.ts`) and
+  filtered on, rather than as the SQL expression the plan first called for:
+  the pay period already solves the identical problem that way, and the result
+  is unit-testable without a database.
 
 ## Roadmap
 
@@ -105,9 +108,9 @@ Full architecture, data model, and phase detail: [docs/implementation-plan.md](d
 - [x] **Phase 2 — Categories:** category list built bottom-up from real data,
       rule-based auto-categorisation, transfer pair detection, bulk
       re-categorisation tools
-- [ ] **Phase 3 — MVP:** transaction list with filtering/search/edit, dashboard
-      (income/expenses per book, category breakdown, balances, GST threshold) —
-      go-live point
+- [x] **Phase 3 — MVP:** transaction list with filtering/search/edit, the
+      pay-period budget, and a `/reports` section (FY income/expenses per book,
+      category breakdown, month-by-month, GST threshold) — go-live point
 - [ ] **Phase 4 — Reports:** IR3 year-end pack, home office calculation, budget
       vs actual
 
@@ -283,8 +286,9 @@ command but not a dead disk. Point it at a NAS bind mount to fix that.
 
 ## Status
 
-Phases 1 and 2 complete, running against twelve months of real bank data —
-2,687 transactions across 11 accounts, from 16/07/2025.
+Phases 1, 2 and 3 complete, running against twelve months of real bank data —
+2,687 transactions across 11 accounts, from 16/07/2025. Phase 3 was the
+go-live point, so the Excel tracker is now the frozen pre-baseline archive.
 
 The database fills itself: accounts and transactions sync from Akahu, dedupe
 on Akahu's transaction ID, reconcile against the reported balance, categorise
@@ -312,7 +316,22 @@ with live card activity showed permanent drift. A warning that is always on is
 a warning nobody reads, and it would have buried a genuinely missing
 transaction in noise.
 
-Next up is Phase 3 — the transaction list and dashboard, which is the go-live
-point.
+Phase 3 shipped in three parts. 3a is authentication and the transaction list;
+3b is the budget, which redefined "dashboard" as the pay-period surface on the
+grounds that a screen showing what you spent without saying what you *meant*
+to spend is a report rather than a tool; 3c is `/reports`, which is that
+report — FY income and expenses per book, a ranked category breakdown, the
+month-by-month view, and the rolling GST turnover monitor.
+
+That leaves the app carrying two date regimes on purpose. `/budget` runs 20th
+to 19th because the question is "how much until payday?"; `/reports` runs
+01/04–31/03 and a rolling twelve months because IRD says so. They will never
+agree, so every reports figure prints its literal date range beside it. 3c
+also fixed the GST turnover window, which compared a UTC-midnight date against
+the current instant and so dropped today's business income for the first
+twelve hours of every NZ day.
+
+Next up is Phase 4 — the IR3 year-end pack, the home office calculation, and
+the xlsx export for the accountant.
 
 Built in the open as a learning and portfolio project.
