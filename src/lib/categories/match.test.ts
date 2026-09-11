@@ -392,3 +392,67 @@ describe("matchTransaction — determinism", () => {
     ).toBeNull();
   });
 });
+
+describe("priority against a catch-all", () => {
+  // The flatmate rules are the first use of `priority` in definitions.ts, and
+  // the case they exist for is narrow: a loan repayment to a flatmate and a
+  // share of the groceries are both DESCRIPTION + OUT with no account scope,
+  // so they are IDENTICAL on specificity. Without priority the winner falls to
+  // the id tie-break — stable, but arbitrary, and arbitrary here means $1,645
+  // of lending filed as a shared household cost. Both still balance.
+  const loan = rule({
+    id: "loan",
+    pattern: "brett thomas brett loan",
+    direction: "OUT",
+    priority: 50,
+  });
+  const catchAll = rule({
+    id: "aaa_catch_all", // sorts FIRST on the id tie-break, so priority has to do the work
+    pattern: "brett thomas",
+    direction: "OUT",
+    priority: 100,
+  });
+
+  const payment = transaction({
+    description: "Brett Thomas Brett Loan",
+    amountCents: -4000,
+  });
+
+  it("sends a loan to the loan category, not the catch-all", () => {
+    const sorted = sortRules([catchAll, loan]);
+
+    expect(matchTransaction(payment, "PERSONAL", sorted)?.categoryId).toBe(
+      "cat_loan",
+    );
+  });
+
+  it("is not relying on specificity, which cannot separate these two", () => {
+    expect(ruleSpecificity(loan)).toBe(ruleSpecificity(catchAll));
+  });
+
+  it("still sends an ordinary payment to the catch-all", () => {
+    const sorted = sortRules([catchAll, loan]);
+    const pizza = transaction({
+      description: "Brett Thomas Pizza",
+      amountCents: -2700,
+    });
+
+    expect(matchTransaction(pizza, "PERSONAL", sorted)?.categoryId).toBe(
+      "cat_aaa_catch_all",
+    );
+  });
+
+  it("leaves incoming money alone — direction is what splits the stream", () => {
+    const sorted = sortRules([catchAll, loan]);
+    // "Thomas Brett" incoming contains neither OUT pattern's substring, but
+    // "Brett Thomas Brett Loan" contains "thomas brett", which is why the
+    // incoming rule in definitions.ts is scoped to IN.
+    const contribution = transaction({
+      description: "Thomas Brett",
+      amountCents: 10000,
+    });
+
+    expect(matchTransaction(contribution, "PERSONAL", sorted)).toBeNull();
+  });
+});
+

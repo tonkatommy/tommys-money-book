@@ -39,11 +39,54 @@ descriptions collapses the 1,786 un-enriched rows to **184 distinct keys**;
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | `Thomas Brett` — 166 in ($20,972), 62 out ($3,808) | **Mixed.** Create `Reimbursements & Shared Costs`, `Loan Repayments Received`, `Loans & Advances Made`. No rule matches these — they go to the review queue and Tommy splits them with the bulk tools. |
+| 1 | `Thomas Brett` — 166 in ($20,972), 62 out ($3,808) | **Mixed.** Create `Reimbursements & Shared Costs`, `Loan Repayments Received`, `Loans & Advances Made`. No rule matches these — they go to the review queue and Tommy splits them with the bulk tools. **Superseded 12/09/2026 — see below.** |
 | 2 | Flatmate income ($13,459) | **Cost-sharing, not taxable.** `Flatmate Contributions`, no taxTag, excluded from the IR3. |
 | 3 | Rental income is net of Ray White's fee | **Warn now, build later.** Phase 2 seeds a `Rental — Management Fees` category and the IR3 pack carries a warning; the manual gross-up mechanism is Phase 4. |
 | 4 | Afterpay / Finance Now ($8,582) | **Repayment is the expense, split by lender.** Two categories: `BNPL — Afterpay`, `BNPL — Finance Now`. |
 | 5 | `Sovereign Account Go Home Loan Cashel St` ($11,810) | **Same Cashel St mortgage, different provider account.** Merges into `Rental — Mortgage Payments` with the ASB payments. |
+
+### Correction to decision 1 (12/09/2026)
+
+Decision 1 was made without knowing who Brett Thomas was, and it was wrong in a
+way worth recording, because the reason it was wrong is a trap the feed will
+set again.
+
+**Brett Thomas and Bonnie Thomas are both flatmates, and siblings.** Their
+surname is Tommy's own first name — Thomas Goodman — which is why a stream
+reading `Thomas Brett` looked like it might be anything at all. It is not a
+person called Thomas: it is the bank's surname-first payer format, exactly as
+Tommy's own legs appear as `Goodman,Thoma`. The direction of the name is the
+whole signal:
+
+| form | direction | meaning |
+|---|---|---|
+| `Thomas Brett`, `Thomas,Bonnie` | IN | the flatmate paying Tommy |
+| `Brett Thomas ...`, `Bonnie Thomas ...` | OUT | Tommy paying the flatmate |
+
+So the stream is not "mixed and unknowable", it is cost-sharing in both
+directions, and it now carries rules:
+
+- Incoming joins `Flatmate Contributions` alongside `Thomas,Bonnie` —
+  untagged, outside the tax net, per decision 2, which was right all along and
+  simply had one of the two flatmates missing from it.
+- Outgoing gets a new `Flatmate Reimbursements` expense category, the mirror
+  of the contributions one and untagged for the same reason. Over the baseline
+  the two net to within a few dollars of zero across 14 months.
+- The genuine exceptions are carved out by particular at `priority: 50`:
+  34 payments totalling $1,645 whose particular says "loan" go to
+  `Loans & Advances Made`, and two saying "gift" go to `Gifts & Donations`.
+
+`Loan Repayments Received` stays rule-free, and that part of decision 1
+survives: no incoming leg carries a particular at all, so a repayment and an
+ordinary contribution are indistinguishable in the feed. The outgoing side can
+be told apart only because Tommy types a particular when he sends money.
+
+What this cost: 227 transactions sat in the review queue for six weeks because
+a name was ambiguous, and the first attempt to clear them in September 2026
+nearly applied a blanket flatmate rule over the top of decision 1 without
+reading it. The decision table is the record; check it before bulk-moving a
+stream it names.
+
 | 6 | AIA claim ($47,555 over 20 payments) | **Taxable — income protection.** Needs a tag the enum doesn't have (see §3). |
 | 7 | Stray receipts (Longden, Neilson, Metal Rec) | **Personal gifts/receipts**, non-taxable. |
 | 8 | `Energy Solution Prov` ($2,059.99) | **Tommy's employer — started 20/07/2026.** Main income source going forward; one payment in the baseline, but `Salary & Wages` is the dominant FY2027 category. |
