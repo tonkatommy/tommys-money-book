@@ -113,9 +113,18 @@ export async function getBudgetSettings(): Promise<BudgetSettingsView> {
  *
  * An explicit date goes straight to `payPeriodFor` — it is already a calendar
  * date, so running it back through the NZ conversion would shift it.
+ *
+ * `now` exists for callers that have already captured an instant for the rest
+ * of their render. This function awaits the database before it reads the
+ * clock, so a caller that captured `now` earlier and let this one default
+ * would be resolving two different instants a query apart. Straddle the
+ * anchor-day rollover in that gap and the shell header advances to the next
+ * pay period over figures that were cut in the previous one — rare, but the
+ * kind of rare that is unreproducible and gets blamed on the figures.
  */
 export async function resolvePeriod(
   periodStart?: string,
+  now: Date = new Date(),
 ): Promise<{ period: PayPeriod; settings: BudgetSettingsView }> {
   const settings = await getBudgetSettings();
   const parsed = periodStart ? new Date(`${periodStart}T00:00:00Z`) : null;
@@ -125,7 +134,7 @@ export async function resolvePeriod(
     period:
       parsed && !Number.isNaN(parsed.getTime())
         ? payPeriodFor(parsed, settings.anchorDay)
-        : currentPayPeriod(settings.anchorDay),
+        : currentPayPeriod(settings.anchorDay, now),
   };
 }
 

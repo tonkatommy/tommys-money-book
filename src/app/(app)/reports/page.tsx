@@ -14,20 +14,17 @@
 // A pure server component. No mutations, so no Server Actions and no forms —
 // the book toggle and the year selector are links, as everywhere else.
 
-import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { Alert, Badge, Card } from "@/components/ui/primitives";
+import { Badge, Card } from "@/components/ui/primitives";
 import { Figure, KV, PaceBar, ScreenHead } from "@/components/ui/data";
-import { withBook } from "@/components/ui/nav";
 import { formatNZD, formatNZDWhole } from "@/lib/money";
 import { nzDate } from "@/lib/budget/period";
 import { parseBook, resolvePeriod } from "@/lib/budget/query";
 import { parseFY, selectableFYs } from "@/lib/reports/fy";
 import { getReportsOverview } from "@/lib/reports/query";
+import { FyLinks, QualityAlerts, ReportLinks } from "./parts";
 
 export const dynamic = "force-dynamic";
-
-const iso = (date: Date): string => date.toISOString().slice(0, 10);
 
 export default async function ReportsPage({
   searchParams,
@@ -50,15 +47,14 @@ export default async function ReportsPage({
   // The shell's header is the pay period, which this screen does not use. It
   // is loaded anyway because the chrome is shared and the header labels it
   // "Pay period" — deliberately, so the two regimes stay visibly separate.
-  const { period, settings } = await resolvePeriod();
+  //
+  // It takes this render's instant rather than reading the clock for itself:
+  // it awaits the database first, so its own `new Date()` would land a query
+  // later than the one the figures were cut at.
+  const { period, settings } = await resolvePeriod(undefined, now);
   const view = await getReportsOverview(book, fy, now);
 
   const years = selectableFYs(now);
-
-  // Link the warnings at the exact range on screen, not at the pay period.
-  // A count for one window and a list for another is how a cleared queue
-  // still shows six.
-  const rangeQuery = `from=${iso(fy.start)}&to=${iso(view.rangeEnd)}`;
 
   return (
     <AppShell
@@ -80,67 +76,23 @@ export default async function ReportsPage({
             </>
           }
           right={
-            <div className="mb-head-actions">
-              {years.map((year) => {
-                const isActive = year.year === fy.year;
-                return (
-                  <Link
-                    key={year.year}
-                    href={withBook(`/reports?fy=${year.year}`, book)}
-                    aria-current={isActive ? "page" : undefined}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: "var(--radius-full)",
-                      border: "1px solid var(--border-default)",
-                      fontSize: "var(--text-xs)",
-                      fontWeight: "var(--weight-medium)",
-                      textDecoration: "none",
-                      background: isActive
-                        ? "var(--surface-card-raised)"
-                        : "transparent",
-                      color: isActive
-                        ? "var(--text-primary)"
-                        : "var(--text-muted)",
-                    }}
-                  >
-                    {year.label}
-                  </Link>
-                );
-              })}
-            </div>
+            <FyLinks
+              years={years}
+              current={fy}
+              book={book}
+              basePath="/reports"
+            />
           }
         />
 
-        {/* Not decoration. Every figure on this screen filters on a category's
-            kind, so an uncategorised transaction is absent from income,
-            absent from expenses, and absent from the totals — which still
-            balance. A reports screen that cannot say how complete it is has
-            not answered the question. */}
-        {view.quality.uncategorisedCount > 0 && (
-          <Alert level="warning">
-            {view.quality.uncategorisedCount} transaction
-            {view.quality.uncategorisedCount === 1 ? "" : "s"} in this range{" "}
-            {view.quality.uncategorisedCount === 1 ? "has" : "have"} no
-            category, so {view.quality.uncategorisedCount === 1 ? "it is" : "they are"}{" "}
-            missing from every figure below.{" "}
-            <Link
-              href={withBook(`/transactions?uncategorised=1&${rangeQuery}`, book)}
-            >
-              Categorise them
-            </Link>
-            .
-          </Alert>
-        )}
+        <ReportLinks book={book} fy={fy} active="index" />
 
-        {view.quality.unassignedAccountCount > 0 && (
-          <Alert level="warning">
-            {view.quality.unassignedAccountCount} account
-            {view.quality.unassignedAccountCount === 1 ? " is" : "s are"} not
-            assigned to a set of books, so nothing in{" "}
-            {view.quality.unassignedAccountCount === 1 ? "it" : "them"} appears
-            in any report. Run <code>npm run accounts:map</code>.
-          </Alert>
-        )}
+        <QualityAlerts
+          quality={view.quality}
+          book={book}
+          fy={fy}
+          rangeEnd={view.rangeEnd}
+        />
 
         <Card
           title={`${fy.label} so far`}

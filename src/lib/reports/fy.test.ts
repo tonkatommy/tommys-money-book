@@ -12,7 +12,9 @@ import {
   fyFor,
   fyRangeEnd,
   fyRangeLabel,
+  iso,
   parseFY,
+  rangeQuery,
   selectableFYs,
 } from "./fy";
 
@@ -133,5 +135,34 @@ describe("fyRangeEnd", () => {
   it("treats the last day of the FY as complete", () => {
     expect(fyRangeEnd(fy, fy.end)).toEqual(fy.end);
     expect(fyRangeLabel(fy, fy.end)).toBe("01/04/2026 – 31/03/2027");
+  });
+});
+
+describe("rangeQuery", () => {
+  // Every drilldown out of a reports screen carries this, and the transaction
+  // list it lands on parses it as an inclusive calendar range. If the two ever
+  // disagree, a report says 43 transactions and the list it opens shows 41 —
+  // both screens confident, neither obviously wrong, and the figure is the one
+  // that gets blamed.
+  const fy = fyBounds(2027);
+
+  it("emits the inclusive FY start, not the day after", () => {
+    expect(rangeQuery(fy, fy.end)).toBe("from=2026-04-01&to=2027-03-31");
+  });
+
+  it("closes a running FY at the range end, not at 31/03", () => {
+    const today = utcDate(2026, 7, 24);
+
+    expect(rangeQuery(fy, fyRangeEnd(fy, today))).toBe(
+      "from=2026-04-01&to=2026-08-24",
+    );
+  });
+
+  it("survives a date whose NZ day and UTC day differ", () => {
+    // 01/04/2026 UTC midnight is 01/04/2026 12pm in NZ. The stored dates are
+    // UTC midnight by construction, so this must still read as the 1st — the
+    // bug being guarded is someone later handing these helpers a real instant.
+    expect(iso(utcDate(2026, 3, 1))).toBe("2026-04-01");
+    expect(iso(utcDate(2027, 2, 31))).toBe("2027-03-31");
   });
 });
