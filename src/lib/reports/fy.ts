@@ -120,3 +120,29 @@ export function fyRangeLabel(fy: FinancialYear, today: Date = nzToday()): string
   if (end.getTime() === fy.end.getTime()) return fy.range;
   return `${nzDate(fy.start)} – ${nzDate(end)} (to date)`;
 }
+
+/**
+ * `YYYY-MM-DD`, the form `parseDateParam` in the transactions layer expects.
+ *
+ * `toISOString` is safe here only because every date in this module is UTC
+ * midnight by construction. Hand it a real instant and it will silently give
+ * you the UTC day, which for an NZ evening is tomorrow.
+ */
+export function iso(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * The `from`/`to` pair for a link out of a reports screen.
+ *
+ * Reports run on the financial year and `/transactions` defaults to the
+ * calendar month, so a link without these lands on a different window than the
+ * count that produced it — a total for one range opening a list for another is
+ * how a correct figure gets doubted.
+ *
+ * `rangeEnd` rather than `fy.end` because a live FY is closed at today by
+ * `fyRangeEnd`: linking to 31/03 would query nine months of future.
+ */
+export function rangeQuery(fy: FinancialYear, rangeEnd: Date): string {
+  return `from=${iso(fy.start)}&to=${iso(rangeEnd)}`;
+}

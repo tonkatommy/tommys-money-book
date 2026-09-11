@@ -47,7 +47,11 @@ export default async function ReportsPage({
   // The shell's header is the pay period, which this screen does not use. It
   // is loaded anyway because the chrome is shared and the header labels it
   // "Pay period" — deliberately, so the two regimes stay visibly separate.
-  const { period, settings } = await resolvePeriod();
+  //
+  // It takes this render's instant rather than reading the clock for itself:
+  // it awaits the database first, so its own `new Date()` would land a query
+  // later than the one the figures were cut at.
+  const { period, settings } = await resolvePeriod(undefined, now);
   const view = await getReportsOverview(book, fy, now);
 
   const years = selectableFYs(now);

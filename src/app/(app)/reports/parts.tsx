@@ -15,24 +15,8 @@ import Link from "next/link";
 import type { Book } from "@/generated/prisma/client";
 import { Alert } from "@/components/ui/primitives";
 import { withBook } from "@/components/ui/nav";
-import type { FinancialYear } from "@/lib/reports/fy";
+import { type FinancialYear, rangeQuery } from "@/lib/reports/fy";
 import type { DataQuality } from "@/lib/reports/query";
-
-/** `YYYY-MM-DD`, the form `parseDateParam` in the transactions layer expects. */
-export function iso(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-/**
- * The `from`/`to` pair for a link out of a reports screen.
- *
- * Reports run on the financial year and `/transactions` defaults to the
- * calendar month, so a link without these lands on a different window than the
- * count that produced it.
- */
-export function rangeQuery(fy: FinancialYear, rangeEnd: Date): string {
-  return `from=${iso(fy.start)}&to=${iso(rangeEnd)}`;
-}
 
 /**
  * The financial-year selector: one link per selectable year.

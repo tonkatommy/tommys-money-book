@@ -41,7 +41,9 @@ export default async function ReportMonthsPage({
   const book = parseBook(params.book);
   const fy = parseFY(params.fy, now);
 
-  const { period, settings } = await resolvePeriod();
+  // The shell header's pay period shares this render's instant, for the same
+  // reason the figures do: one clock reading, or the two can disagree.
+  const { period, settings } = await resolvePeriod(undefined, now);
   const view = await getMonthlyBreakdown(book, fy, now);
 
   const years = selectableFYs(now);

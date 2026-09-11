@@ -21,12 +21,12 @@ import { Figure, KV, RankedBars, ScreenHead } from "@/components/ui/data";
 import { withBook } from "@/components/ui/nav";
 import { formatNZD } from "@/lib/money";
 import { parseBook, resolvePeriod } from "@/lib/budget/query";
-import { parseFY, selectableFYs } from "@/lib/reports/fy";
+import { parseFY, rangeQuery, selectableFYs } from "@/lib/reports/fy";
 import {
   getCategoryBreakdown,
   type CategoryTotal,
 } from "@/lib/reports/query";
-import { FyLinks, QualityAlerts, ReportLinks, rangeQuery } from "../parts";
+import { FyLinks, QualityAlerts, ReportLinks } from "../parts";
 
 export const dynamic = "force-dynamic";
 
@@ -49,8 +49,10 @@ export default async function ReportCategoriesPage({
 
   // The shell header shows the pay period, which this screen does not use. It
   // stays labelled "Pay period" precisely so the two date regimes never read
-  // as the same thing.
-  const { period, settings } = await resolvePeriod();
+  // as the same thing. It shares this render's instant so the header cannot
+  // roll over to the next period while the figures below stay in the previous
+  // one.
+  const { period, settings } = await resolvePeriod(undefined, now);
   const view = await getCategoryBreakdown(book, fy, now);
 
   const years = selectableFYs(now);
