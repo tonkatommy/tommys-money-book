@@ -81,6 +81,7 @@ services:
       SYNC_CRON: ${SYNC_CRON:-0 7 * * *}
       SYNC_LOOKBACK_DAYS: ${SYNC_LOOKBACK_DAYS:-7}
       SYNC_ON_START: ${SYNC_ON_START:-false}
+      SYNC_CATCHUP: ${SYNC_CATCHUP:-true}
       # node-cron pins the schedule to Pacific/Auckland itself, but setting TZ
       # too means log timestamps read in NZ time rather than UTC.
       TZ: Pacific/Auckland

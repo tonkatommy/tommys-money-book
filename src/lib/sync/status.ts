@@ -7,16 +7,12 @@
 import { prisma } from "@/lib/prisma";
 import type { Book } from "@/generated/prisma/client";
 import { PERSISTENT_DRIFT_HOURS, isDriftPersistent } from "./reconcile";
+import { STALE_AFTER_HOURS, hoursSince, isSyncStale } from "./stale";
 
-/**
- * How long without a successful sync before we call it stale.
- *
- * The worker runs daily, so 36 hours means one missed morning triggers the
- * warning while a normal overnight gap never does. This is the single most
- * valuable alert on the page: a sync that has quietly stopped looks exactly
- * like a sync that has nothing to do.
- */
-export const STALE_AFTER_HOURS = 36;
+// The staleness rule lives in `stale.ts` because the worker acts on it and
+// this page reports it, and the two must never disagree about what overdue
+// means. Re-exported so existing importers of this module are unaffected.
+export { STALE_AFTER_HOURS } from "./stale";
 
 export type AccountStatusView = {
   id: string;
@@ -180,16 +176,13 @@ function buildAlerts(input: {
       level: "error",
       message: "Every sync so far has failed. Check the worker logs.",
     });
-  } else {
-    const hoursSince = (now.getTime() - lastSuccess.getTime()) / 3_600_000;
-    if (hoursSince > STALE_AFTER_HOURS) {
-      alerts.push({
-        level: "error",
-        message:
-          `No successful sync in ${Math.floor(hoursSince)} hours. ` +
-          `The worker runs daily — check \`docker compose logs worker\`.`,
-      });
-    }
+  } else if (isSyncStale(lastSuccess, now, STALE_AFTER_HOURS)) {
+    alerts.push({
+      level: "error",
+      message:
+        `No successful sync in ${Math.floor(hoursSince(lastSuccess, now))} hours. ` +
+        `The worker runs daily — check \`docker compose logs worker\`.`,
+    });
   }
 
   // 3. The most recent run went badly.

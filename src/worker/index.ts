@@ -19,6 +19,7 @@ import cron from "node-cron";
 
 import { disconnectPrisma, prisma } from "@/lib/prisma";
 import { runSync } from "@/lib/sync/run";
+import { STALE_AFTER_HOURS, isSyncStale } from "@/lib/sync/stale";
 
 // 7am. Akahu's overnight refresh has landed by then, and it's before the
 // working day starts.
@@ -67,6 +68,62 @@ async function sync(): Promise<void> {
   }
 }
 
+/**
+ * Sync now if the feed is overdue.
+ *
+ * `cron.schedule` fires only while the process is up. It has no concept of a
+ * tick it missed: if the host is asleep at 7am, or the stack is down, or a
+ * rebuild straddles the mark, that morning's sync does not happen and nothing
+ * anywhere records that it didn't. There is no FAILED run to find, because
+ * there was no run. The worker sits there logging its schedule and looking
+ * perfectly healthy while the data quietly ages — which is the same failure
+ * the status page's staleness banner exists to catch, arriving by a route the
+ * worker itself could have prevented.
+ *
+ * That is not hypothetical: this app went 27 days on a single baseline,
+ * through a worker that was up and correctly scheduled the whole time.
+ *
+ * The threshold is deliberately the status page's own (36 hours), so the
+ * worker acts on exactly the condition the page warns about. A normal
+ * overnight restart is nowhere near it, which is what keeps this off Akahu's
+ * 1-hour rest limit — you would have to restart the container more than a day
+ * after the last success to trigger a sync, and at that point a sync is the
+ * correct thing to do.
+ *
+ * An `incremental` catch-up is enough however long the gap is, and this is
+ * worth being precise about because the instinct is to reach for a baseline.
+ * `incrementalWindow` anchors on the latest transaction date we *hold* minus a
+ * lookback, never on when the last sync ran, so a 27-day gap simply produces a
+ * 34-day window. There is no hole to leave.
+ */
+async function catchUp(): Promise<void> {
+  try {
+    const lastSuccess = await prisma.syncRun.findFirst({
+      where: { status: { in: ["SUCCESS", "PARTIAL"] } },
+      orderBy: { startedAt: "desc" },
+    });
+
+    if (!isSyncStale(lastSuccess?.startedAt ?? null, new Date())) {
+      console.log("[worker] feed is current — no catch-up needed");
+      return;
+    }
+
+    console.log(
+      lastSuccess
+        ? `[worker] last successful sync was ${lastSuccess.startedAt.toISOString()}, ` +
+            `over ${STALE_AFTER_HOURS}h ago — catching up now`
+        : "[worker] no successful sync on record — catching up now",
+    );
+
+    await sync();
+  } catch (err) {
+    // Same reasoning as the swallow in `sync`: a worker that dies on a bad
+    // startup check is a worker that misses tomorrow's schedule too, which is
+    // a worse outcome than a missed catch-up.
+    console.error("[worker] catch-up check failed, schedule is unaffected:", err);
+  }
+}
+
 function main(): void {
   const schedule = process.env.SYNC_CRON?.trim() || DEFAULT_SCHEDULE;
 
@@ -86,15 +143,6 @@ function main(): void {
   );
 
   cron.schedule(schedule, () => void sync(), { timezone: TIMEZONE });
-
-  // Optional: sync once at startup. Off by default, because restarting the
-  // container shouldn't hammer Akahu (personal apps enforce a 1-hour rest
-  // between manual refreshes), but it's invaluable when verifying the
-  // container actually works without waiting until 7am.
-  if (process.env.SYNC_ON_START === "true") {
-    console.log("[worker] SYNC_ON_START=true — running one sync now");
-    void sync();
-  }
 
   // Compose sends SIGTERM on `docker compose down`, then SIGKILLs after a
   // grace period (10s by default). We drain: let the in-flight sync finish so
@@ -147,6 +195,28 @@ function main(): void {
       })();
     });
   }
+
+  // Last, deliberately: everything below can start a sync, and a sync that
+  // began before the handlers above were registered could not be drained on
+  // shutdown — leaving the orphaned RUNNING row they exist to prevent.
+
+  // Sync once at startup regardless of how fresh the feed is. Off by default,
+  // because restarting the container shouldn't hammer Akahu (personal apps
+  // enforce a 1-hour rest between manual refreshes), but it's invaluable when
+  // verifying the container actually works without waiting until 7am.
+  if (process.env.SYNC_ON_START === "true") {
+    console.log("[worker] SYNC_ON_START=true — running one sync now");
+    void sync();
+    return;
+  }
+
+  // Otherwise catch up only if the feed is actually overdue. See `catchUp`.
+  if (process.env.SYNC_CATCHUP === "false") {
+    console.log("[worker] SYNC_CATCHUP=false — not checking for a missed sync");
+    return;
+  }
+
+  void catchUp();
 }
 
 main();
