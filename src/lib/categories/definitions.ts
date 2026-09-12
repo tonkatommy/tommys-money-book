@@ -119,6 +119,20 @@ export const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
           "incoming contributions from the 'bonnie thomas ...' payments going " +
           "the other way.",
       },
+      {
+        field: D,
+        pattern: "thomas brett",
+        direction: "IN",
+        note:
+          "Brett Thomas, the other flatmate, and Bonnie's brother. Their " +
+          "surname is Tommy's first name, which is why this stream read as " +
+          "ambiguous for so long — 'Thomas Brett' is the same surname-first " +
+          "payer format as 'Goodman,Thoma' on Tommy's own legs, not a person " +
+          "called Thomas. Confirmed by Tommy 12/09/2026, superseding the " +
+          "'mixed, split by hand' decision of 27/07/2026. `direction: IN` is " +
+          "load-bearing: 'Brett Thomas Brett Loan' contains this substring and " +
+          "must not match.",
+      },
     ],
   },
   {
@@ -205,7 +219,13 @@ export const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
     name: "Loan Repayments Received",
     book: "PERSONAL",
     kind: "INCOME",
-    note: "See Reimbursements & Shared Costs — split by hand, no rules.",
+    note:
+      "Still by hand, and for a reason that survived the 12/09/2026 " +
+      "clarification: no incoming leg from Brett carries a particular at all, " +
+      "so a repayment and an ordinary flatmate contribution are " +
+      "indistinguishable in the feed. The outgoing side CAN be told apart " +
+      "— see Loans & Advances Made — because Tommy types a particular when " +
+      "he sends money.",
   },
 
   // ===========================================================================
@@ -669,13 +689,66 @@ export const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
     rules: [
       { field: A, pattern: "gift and souvenir stores" },
       { field: D, pattern: "vaughn gift", direction: "OUT" },
+      // Same priority reasoning as the loan rules: a gift to a flatmate is a
+      // gift, not a shared cost, and the catch-all would otherwise swallow it.
+      { field: D, pattern: "brett thomas gift", direction: "OUT", priority: 50 },
     ],
   },
   {
     name: "Loans & Advances Made",
     book: "PERSONAL",
     kind: "EXPENSE",
-    note: "The outgoing half of the Thomas Brett split. No rules — by hand.",
+    note:
+      "Money lent to the flatmates, told apart from ordinary reimbursements " +
+      "by the particular Tommy typed on the payment. These three patterns " +
+      "cover 34 payments totalling $1,645 over the baseline.",
+    rules: [
+      // `priority` below 100 so these beat the catch-all on Flatmate
+      // Reimbursements. Both are DESCRIPTION + OUT and therefore identical on
+      // specificity, so priority is the only thing separating them: without
+      // it a loan would land in reimbursements on the id tie-break, which is
+      // stable but arbitrary. First use of the field in this file.
+      { field: D, pattern: "brett thomas brett loan", direction: "OUT", priority: 50 },
+      { field: D, pattern: "brett thomas loan", direction: "OUT", priority: 50 },
+      {
+        field: D,
+        pattern: "brett thomas brett lpan",
+        direction: "OUT",
+        priority: 50,
+        note: "Typo in the bank description, and a real $40 payment. Kept verbatim because the pattern matches the feed, not the intent.",
+      },
+    ],
+  },
+  {
+    name: "Flatmate Reimbursements",
+    book: "PERSONAL",
+    kind: "EXPENSE",
+    note:
+      "The outgoing half of the flatmate arrangement: Tommy paying Brett and " +
+      "Bonnie back for shared groceries, takeaways, household bits. The " +
+      "mirror of Flatmate Contributions and untagged for the same reason — " +
+      "cost-sharing between flatmates is outside the tax net in both " +
+      "directions, so neither side may reach the IR3. Over the baseline the " +
+      "two net to within a few dollars of zero across 14 months, which is " +
+      "what an even share looks like.",
+    rules: [
+      // A catch-all, and worth being honest that it IS one. The stream is
+      // genuinely mixed — pizza, loo roll, a $300 pain relief run — and this
+      // files all of it as one shared cost. That is a deliberate trade: the
+      // alternative, leaving it rule-free as the 27/07/2026 decision did, put
+      // 99 transactions a year into the review queue for no gain, because the
+      // tax treatment is identical whatever the particular says. The
+      // exceptions that AREN'T shared costs (loans, gifts) are carved out
+      // above at priority 50, and anything else miscategorised survives a
+      // hand-fix because MANUAL is never overwritten.
+      {
+        field: D,
+        pattern: "brett thomas",
+        direction: "OUT",
+        note: "First-name-first is the payee format on money going OUT. Incoming is 'thomas brett' and belongs to Flatmate Contributions.",
+      },
+      { field: D, pattern: "bonnie thomas", direction: "OUT" },
+    ],
   },
 
   // ===========================================================================
