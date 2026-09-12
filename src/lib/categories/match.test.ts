@@ -442,17 +442,31 @@ describe("priority against a catch-all", () => {
     );
   });
 
-  it("leaves incoming money alone — direction is what splits the stream", () => {
-    const sorted = sortRules([catchAll, loan]);
-    // "Thomas Brett" incoming contains neither OUT pattern's substring, but
-    // "Brett Thomas Brett Loan" contains "thomas brett", which is why the
-    // incoming rule in definitions.ts is scoped to IN.
-    const contribution = transaction({
-      description: "Thomas Brett",
-      amountCents: 10000,
-    });
+   it("routes by direction instead of letting the OUT rules match incoming money", () => {
+     const incoming = rule({
+       id: "incoming",
+       pattern: "thomas brett",
+       direction: "IN",
+     });
+     const sorted = sortRules([catchAll, loan, incoming]);
+     const contribution = transaction({
+       description: "Thomas Brett",
+       amountCents: 10000,
+     });
 
-    expect(matchTransaction(contribution, "PERSONAL", sorted)).toBeNull();
-  });
+     expect(matchTransaction(contribution, "PERSONAL", sorted)?.categoryId).toBe(
+       "cat_incoming",
+     );
+     expect(
+       matchTransaction(
+         transaction({
+           description: "Brett Thomas Brett Loan",
+           amountCents: -4000,
+         }),
+         "PERSONAL",
+         sorted,
+       )?.categoryId,
+     ).toBe("cat_loan");
+   });
 });
 
