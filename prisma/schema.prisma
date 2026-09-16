@@ -350,6 +350,24 @@ model CategoryBudget {
   @@index([periodStart])
 }
 
+// The two figures the Akahu feed cannot see, entered once a year.
+//
+// Ray White nets its management fee before paying rent, so the feed only
+// ever shows the net amount — the IR3 needs gross rental income with the fee
+// as its own deductible line. The ASB mortgage repayment is one bank-fed
+// total covering principal and interest, and only interest is deductible;
+// the feed cannot split it, the annual loan statement can. Null means "not
+// entered yet" for that FY, and the IR3 screen has to say so loudly rather
+// than quietly use the bank-fed total as if it were the deductible figure.
+model TaxYearAdjustment {
+  fyLabel String @id // "FY2027" — matches FinancialYear.label from reports/fy.ts
+
+  rentalManagementFeeCents    Int?
+  rentalMortgageInterestCents Int?
+
+  updatedAt DateTime @updatedAt
+}
+
 // One row per sync attempt — the audit trail that makes "the sync silently
 // stopped" a visible condition rather than a mystery.
 model SyncRun {
