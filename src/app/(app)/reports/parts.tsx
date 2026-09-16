@@ -136,12 +136,13 @@ export function ReportLinks({
 }: {
   book: Book;
   fy: FinancialYear;
-  active: "index" | "categories" | "months";
+  active: "index" | "categories" | "months" | "ir3";
 }) {
   const links = [
     { key: "index", href: "/reports", label: "Overview" },
     { key: "categories", href: "/reports/categories", label: "By category" },
     { key: "months", href: "/reports/months", label: "Month by month" },
+    { key: "ir3", href: "/reports/ir3", label: "IR3 pack" },
   ] as const;
 
   return (
