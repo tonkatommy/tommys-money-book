@@ -111,8 +111,11 @@ Full architecture, data model, and phase detail: [docs/implementation-plan.md](d
 - [x] **Phase 3 — MVP:** transaction list with filtering/search/edit, the
       pay-period budget, and a `/reports` section (FY income/expenses per book,
       category breakdown, month-by-month, GST threshold) — go-live point
-- [ ] **Phase 4 — Reports:** IR3 year-end pack, home office calculation, budget
-      vs actual
+- [x] **Phase 4a — IR3 pack:** `/reports/ir3` — FY rental and business
+      summaries by tax tag, the 12.57% home office deduction, and an `.xlsx`
+      export, plus a form for the two figures the bank feed can't see (the
+      management fee and the mortgage interest)
+- [ ] **Phase 4b/4c — Budget vs actual, savings goals:** not yet designed
 
 ## Getting started
 
@@ -333,7 +336,21 @@ also fixed the GST turnover window, which compared a UTC-midnight date against
 the current instant and so dropped today's business income for the first
 twelve hours of every NZ day.
 
-Next up is Phase 4 — the IR3 year-end pack, the home office calculation, and
-the xlsx export for the accountant.
+**Phase 4a landed 16/09/2026**: `/reports/ir3`, the IR3 pack. It reads both
+books at once rather than the usual `?book=` toggle, because an IR3 return is
+one document, not a per-book one — Cashel St rental and other personal
+income sit in PERSONAL, Tommy Tinkers in BUSINESS, and the home office
+deduction spans both by tax tag. It also adds the one form in the app that
+isn't a category or a transaction: the Ray White management fee and the ASB
+mortgage interest, entered once a year, because the bank feed structurally
+cannot see either. Leaving one blank doesn't quietly borrow the bank-fed
+total as if it were correct — the mortgage payments category is excluded
+from the deductible total entirely until the interest is confirmed, which is
+the safe direction to be wrong in on a document going to IRD. AIA's taxable
+treatment, the entertainment 50% limit, and the mortgage interest figure
+itself are still open questions for Garreth; the report states them as
+caveats rather than picking an answer.
+
+Next up is 4b (budget vs actual) and 4c (savings goals) — not yet designed.
 
 Built in the open as a learning and portfolio project.

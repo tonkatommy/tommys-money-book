@@ -419,6 +419,38 @@ different audience.
 - Budget vs actual, savings goals — the remaining recurring tasks from the
   project instructions.
 
+**Split into 4a, 4b and 4c in delivery**, the same reason Phase 3 was split:
+the IR3 pack, budget vs actual, and savings goals don't share a data layer,
+and specifying all three at once means specifying two nobody is waiting on
+yet. Spec: `docs/superpowers/specs/2026-09-16-phase-4a-ir3-design.md`.
+
+**4a (IR3 pack) implemented 16/09/2026.** `/reports/ir3` reads both books at
+once — the one reports screen that doesn't take a `?book=` filter, because an
+IR3 return is a single document, not a per-book one. It surfaces the FY
+rental summary (gross income, itemised expenses, the mortgage
+interest/principal split), the Tommy Tinkers summary by tax tag
+(`Entertainment` broken out, never auto-halved), the home office deduction at
+12.57%, other taxable personal income, and an `.xlsx` download via `exceljs`.
+
+The two figures the Akahu feed structurally cannot see — the Ray White
+management fee and the ASB mortgage interest — are entered once a year
+through a form (`TaxYearAdjustment`, one row per FY). Leaving either blank
+does not quietly use the bank-fed total as the truth: the gross-up is
+visibly short and the mortgage payments category is excluded from the
+deductible total entirely rather than counted at full value, which is the
+safe direction to be wrong in on a document going to IRD.
+
+**Still open, and stated as caveats on the screen and in the export rather
+than resolved in code**, because they're Garreth's call, not this app's:
+whether AIA income-protection payments are taxable income or a non-taxable
+lump sum, whether the NZ entertainment-deduction 50% limit applies, and
+confirming the mortgage-interest figure against the actual ASB statement.
+None of the arithmetic assumes an answer to any of the three. The figures
+also haven't yet been reconciled against a real Ray White/ASB statement or
+run past Garreth — do that before trusting this for an actual filed return.
+
+4b (budget vs actual) and 4c (savings goals) are not yet designed.
+
 Rough total: sync foundation in ~3 weekends, categorised data by ~5, MVP live
 around ~8–9 weekends of part-time work. As a junior dev budget generously — the
 learning is the point. The nice property of this ordering is that the riskiest

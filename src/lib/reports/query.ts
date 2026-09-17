@@ -25,6 +25,16 @@ import type { Book } from "@/generated/prisma/client";
 import { nzDate, nzToday, utcDate } from "@/lib/budget/period";
 import { rollingBusinessTurnoverCents } from "@/lib/categories/verify";
 import { fyRangeEnd, fyRangeLabel, type FinancialYear } from "./fy";
+import {
+  computeBusinessFigures,
+  computeHomeOfficeFigures,
+  computeRentalFigures,
+  computeTaxableIncomeFigures,
+  type BusinessFigures,
+  type HomeOfficeFigures,
+  type RentalFigures,
+  type TaxableIncomeFigures,
+} from "./ir3";
 
 /** The GST registration threshold, in cents. IRD's figure, not the app's. */
 export const GST_THRESHOLD_CENTS = 60_000_00;
@@ -477,5 +487,84 @@ export async function getMonthlyBreakdown(
     netCents: incomeCents - expensesCents,
     transactions: totalOf((bucket) => bucket.transactions),
     quality,
+  };
+}
+
+/* ==========================================================================
+   The IR3 pack
+   ========================================================================== */
+
+/** The two figures the Akahu feed cannot see, as stored for one FY. Null means "not entered yet". */
+export type TaxYearAdjustmentView = {
+  rentalManagementFeeCents: number | null;
+  rentalMortgageInterestCents: number | null;
+};
+
+export async function getTaxYearAdjustment(
+  fyLabel: string,
+): Promise<TaxYearAdjustmentView> {
+  const row = await prisma.taxYearAdjustment.findUnique({ where: { fyLabel } });
+
+  return {
+    rentalManagementFeeCents: row?.rentalManagementFeeCents ?? null,
+    rentalMortgageInterestCents: row?.rentalMortgageInterestCents ?? null,
+  };
+}
+
+export type Ir3Pack = {
+  fy: FinancialYear;
+  rangeEnd: Date;
+  rangeLabel: string;
+  adjustment: TaxYearAdjustmentView;
+  rental: RentalFigures;
+  business: BusinessFigures;
+  homeOffice: HomeOfficeFigures;
+  taxableIncome: TaxableIncomeFigures;
+  /** Both books — this screen is not scoped to one, see below. */
+  personalQuality: DataQuality;
+  businessQuality: DataQuality;
+};
+
+/**
+ * Everything the `/reports/ir3` screen needs for one financial year.
+ *
+ * Unlike every other reports screen, this one does not take a `book`
+ * filter. An IR3 return is one document covering both books at once: rental
+ * and other personal income sit in PERSONAL, the business summary in
+ * BUSINESS, and the home office deduction spans both by tag rather than by
+ * book. See the Phase 4a spec §4.
+ */
+export async function getIr3Pack(
+  fy: FinancialYear,
+  now: Date = new Date(),
+): Promise<Ir3Pack> {
+  const today = nzToday(now);
+  const rangeEnd = fyRangeEnd(fy, today);
+
+  const [
+    personalCategories,
+    businessCategories,
+    personalQuality,
+    businessQuality,
+    adjustment,
+  ] = await Promise.all([
+    categoryTotals("PERSONAL", fy.start, rangeEnd),
+    categoryTotals("BUSINESS", fy.start, rangeEnd),
+    dataQuality("PERSONAL", fy.start, rangeEnd),
+    dataQuality("BUSINESS", fy.start, rangeEnd),
+    getTaxYearAdjustment(fy.label),
+  ]);
+
+  return {
+    fy,
+    rangeEnd,
+    rangeLabel: fyRangeLabel(fy, today),
+    adjustment,
+    rental: computeRentalFigures(personalCategories, adjustment),
+    business: computeBusinessFigures(businessCategories),
+    homeOffice: computeHomeOfficeFigures(personalCategories, fy.label),
+    taxableIncome: computeTaxableIncomeFigures(personalCategories),
+    personalQuality,
+    businessQuality,
   };
 }
