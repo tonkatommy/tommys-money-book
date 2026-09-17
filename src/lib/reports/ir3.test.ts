@@ -8,6 +8,7 @@ import {
   computeHomeOfficeFigures,
   computeRentalFigures,
   computeTaxableIncomeFigures,
+  HOME_OFFICE_RATE_FY_LABEL,
   homeOfficeDeductionCents,
   RENTAL_MANAGEMENT_FEE_CATEGORY_NAME,
   RENTAL_MORTGAGE_CATEGORY_NAME,
@@ -60,6 +61,7 @@ describe("computeRentalFigures", () => {
 
     expect(figures.netRentReceivedCents).toBe(24_000_00);
     expect(figures.managementFeeCents).toBe(1_800_00);
+    expect(figures.managementFeeEntered).toBe(true);
     expect(figures.grossIncomeCents).toBe(25_800_00);
 
     const feeLine = figures.expenseLines.find(
@@ -89,6 +91,7 @@ describe("computeRentalFigures", () => {
     expect(figures.warnings.join(" ")).toMatch(/mortgage interest/i);
 
     expect(figures.managementFeeCents).toBe(0);
+    expect(figures.managementFeeEntered).toBe(false);
     expect(figures.grossIncomeCents).toBe(figures.netRentReceivedCents);
 
     // Deductible total is every non-mortgage expense only — the mortgage
@@ -116,6 +119,36 @@ describe("computeRentalFigures", () => {
     // No mortgage payments this range, so nothing is silently excluded from
     // the deductible total by the missing-interest branch.
     expect(figures.deductibleExpenseCents).toBe(2_400_00 + 1_200_00 + 1_800_00);
+  });
+
+  it("still warns about missing interest when reversals net the mortgage category to zero", () => {
+    // A failed direct debit and its reversal both landed this FY — real
+    // mortgage activity happened, but the net total is zero, not positive.
+    const withNettedMortgage = categories.map((c) =>
+      c.name === RENTAL_MORTGAGE_CATEGORY_NAME ? { ...c, totalCents: 0 } : c,
+    );
+
+    const figures = computeRentalFigures(withNettedMortgage, {
+      rentalManagementFeeCents: 1_800_00,
+      rentalMortgageInterestCents: null,
+    });
+
+    expect(figures.mortgagePaymentsCents).toBe(0);
+    expect(figures.warnings.some((warning) => /mortgage interest/i.test(warning))).toBe(
+      true,
+    );
+  });
+
+  it("does not warn that the management fee is missing when it was genuinely entered as $0", () => {
+    const figures = computeRentalFigures(categories, {
+      rentalManagementFeeCents: 0,
+      rentalMortgageInterestCents: 15_000_00,
+    });
+
+    expect(figures.managementFeeEntered).toBe(true);
+    expect(figures.warnings.some((warning) => /management fee/i.test(warning))).toBe(
+      false,
+    );
   });
 });
 
@@ -148,18 +181,29 @@ describe("computeBusinessFigures", () => {
 });
 
 describe("computeHomeOfficeFigures", () => {
-  it("sums the HOME_OFFICE categories and applies the rate", () => {
-    const categories: CategoryTotal[] = [
-      category("Home Rent", "HOME_OFFICE", 20_000_00),
-      category("Home Power", "HOME_OFFICE", 2_000_00),
-      category("Groceries", null, 1_000_00), // untagged, must not be counted
-    ];
+  const categories: CategoryTotal[] = [
+    category("Home Rent", "HOME_OFFICE", 20_000_00),
+    category("Home Power", "HOME_OFFICE", 2_000_00),
+    category("Groceries", null, 1_000_00), // untagged, must not be counted
+  ];
 
-    const figures = computeHomeOfficeFigures(categories);
+  it("sums the HOME_OFFICE categories and applies the rate", () => {
+    const figures = computeHomeOfficeFigures(categories, HOME_OFFICE_RATE_FY_LABEL);
 
     expect(figures.eligibleCents).toBe(22_000_00);
     expect(figures.deductionCents).toBe(homeOfficeDeductionCents(22_000_00));
     expect(figures.lines).toHaveLength(2);
+    expect(figures.rateUnconfirmed).toBe(false);
+    expect(figures.caveats).toHaveLength(0);
+  });
+
+  it("flags the rate as unconfirmed for any other financial year", () => {
+    const figures = computeHomeOfficeFigures(categories, "FY2026");
+
+    expect(figures.rateUnconfirmed).toBe(true);
+    expect(figures.caveats.join(" ")).toMatch(/FY2026/);
+    // Still computes a figure — the caveat is informational, not a refusal.
+    expect(figures.deductionCents).toBe(homeOfficeDeductionCents(22_000_00));
   });
 });
 

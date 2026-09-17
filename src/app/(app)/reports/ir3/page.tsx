@@ -115,9 +115,9 @@ export default async function Ir3Page({
               value={formatNZD(rental.grossIncomeCents)}
               tone="var(--money-in)"
               note={
-                rental.managementFeeCents > 0
+                rental.managementFeeEntered
                   ? `net rent ${formatNZD(rental.netRentReceivedCents)} + management fee ${formatNZD(rental.managementFeeCents)}`
-                  : "net rent received, per the bank feed"
+                  : "net rent received, per the bank feed — management fee not entered"
               }
             />
             <Figure
@@ -147,7 +147,7 @@ export default async function Ir3Page({
                 hint={
                   line.isMortgage
                     ? rental.mortgageInterestCents !== null
-                      ? `interest only, of ${formatNZD(rental.mortgagePaymentsCents)} paid`
+                      ? `interest only — ${formatNZD(rental.mortgagePrincipalCents)} principal (not deductible) of ${formatNZD(rental.mortgagePaymentsCents)} paid`
                       : "excluded — interest not entered"
                     : line.fromAdjustment
                       ? "from the adjustment below"
@@ -245,6 +245,12 @@ export default async function Ir3Page({
             GST turnover monitor lives on the <a href={`/reports?book=BUSINESS&fy=${fy.year}`}>overview</a> screen, not repeated here.
           </p>
         </Card>
+
+        {homeOffice.caveats.map((caveat, index) => (
+          <Alert key={`home-office-caveat-${index}`} level="warning">
+            {caveat}
+          </Alert>
+        ))}
 
         <Card title="Home office">
           <div className="mb-grid-tight" style={{ marginBottom: "var(--space-4)" }}>

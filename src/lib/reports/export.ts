@@ -51,6 +51,61 @@ function addCaveats(sheet: ExcelJS.Worksheet, caveats: string[]) {
 }
 
 /**
+ * A leading "Overview" sheet, so the completeness warnings the screen shows
+ * (`QualityAlerts`, reports/parts.tsx) aren't lost on the way to a workbook.
+ *
+ * Every figure in this pack filters on `category.kind`, so an uncategorised
+ * transaction is silently absent from every total — the totals still add up,
+ * and nothing in the rest of the workbook looks wrong. Without this sheet, a
+ * workbook forwarded to Garreth would look complete even when it's known to
+ * be missing data; exceljs opens a workbook to its first sheet, which is why
+ * this one is added first rather than appended at the end.
+ */
+function addOverviewSheet(workbook: ExcelJS.Workbook, pack: Ir3Pack): void {
+  const sheet = workbook.addWorksheet("Overview");
+  addTitle(sheet, "IR3 pack", pack.rangeLabel);
+
+  const { personalQuality, businessQuality } = pack;
+  const warnings: string[] = [];
+  if (personalQuality.uncategorisedCount > 0) {
+    warnings.push(
+      `${personalQuality.uncategorisedCount} personal transaction(s) in this ` +
+        `range have no category and are missing from every rental and ` +
+        `other-income figure in this pack.`,
+    );
+  }
+  if (businessQuality.uncategorisedCount > 0) {
+    warnings.push(
+      `${businessQuality.uncategorisedCount} business transaction(s) in this ` +
+        `range have no category and are missing from the Tommy Tinkers figures.`,
+    );
+  }
+  if (personalQuality.unassignedAccountCount > 0) {
+    warnings.push(
+      `${personalQuality.unassignedAccountCount} account(s) are not assigned ` +
+        `to a set of books, so their transactions appear nowhere in this pack.`,
+    );
+  }
+
+  if (warnings.length > 0) {
+    const header = sheet.addRow(["These figures may be incomplete"]);
+    header.font = { bold: true, color: { argb: "FFCC3333" } };
+    for (const warning of warnings) {
+      const row = sheet.addRow([warning]);
+      row.font = { color: { argb: "FFCC3333" } };
+      sheet.mergeCells(`A${row.number}:C${row.number}`);
+      row.getCell(1).alignment = { wrapText: true };
+    }
+    sheet.addRow([]);
+  }
+
+  sheet.addRow([
+    "This is a starting point for the return, not a filed one. See each " +
+      "section's own notes for figures still needing Garreth's confirmation.",
+  ]).font = { italic: true };
+}
+
+/**
  * Build the workbook. Pure given a pack — no Prisma, no request handling —
  * so the route handler stays a thin wrapper around this and `getIr3Pack`.
  */
@@ -61,6 +116,8 @@ export function buildIr3Workbook(pack: Ir3Pack): ExcelJS.Workbook {
 
   const { rental, business, homeOffice, taxableIncome } = pack;
 
+  addOverviewSheet(workbook, pack);
+
   const rentalSheet = workbook.addWorksheet("Rental — Cashel St");
   addTitle(rentalSheet, "Rental — Cashel St", pack.rangeLabel);
   addLine(rentalSheet, "Net rent received", rental.netRentReceivedCents);
@@ -68,7 +125,7 @@ export function buildIr3Workbook(pack: Ir3Pack): ExcelJS.Workbook {
     rentalSheet,
     "Management fee (gross-up)",
     rental.managementFeeCents,
-    rental.managementFeeCents === 0 ? "not entered for this year" : undefined,
+    rental.managementFeeEntered ? undefined : "not entered for this year",
   );
   addTotalLine(rentalSheet, "Gross rental income", rental.grossIncomeCents);
   rentalSheet.addRow([]);
@@ -81,7 +138,7 @@ export function buildIr3Workbook(pack: Ir3Pack): ExcelJS.Workbook {
         rental.mortgageInterestCents ?? 0,
         rental.mortgageInterestCents === null
           ? `excluded — of ${centsToDollars(rental.mortgagePaymentsCents).toFixed(2)} paid, interest not entered`
-          : `of ${centsToDollars(rental.mortgagePaymentsCents).toFixed(2)} paid`,
+          : `${centsToDollars(rental.mortgagePrincipalCents).toFixed(2)} principal (not deductible) of ${centsToDollars(rental.mortgagePaymentsCents).toFixed(2)} paid`,
       );
     } else {
       addLine(rentalSheet, line.name, line.totalCents, line.fromAdjustment ? "from adjustment" : undefined);
@@ -122,6 +179,7 @@ export function buildIr3Workbook(pack: Ir3Pack): ExcelJS.Workbook {
   addTotalLine(homeOfficeSheet, "Eligible costs", homeOffice.eligibleCents);
   homeOfficeSheet.addRow([]);
   addTotalLine(homeOfficeSheet, "Deduction at 12.57%", homeOffice.deductionCents);
+  addCaveats(homeOfficeSheet, homeOffice.caveats);
 
   const taxableIncomeSheet = workbook.addWorksheet("Other taxable income");
   addTitle(taxableIncomeSheet, "Other taxable income", pack.rangeLabel);

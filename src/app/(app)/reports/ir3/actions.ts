@@ -12,12 +12,39 @@ import { hasSession } from "@/lib/auth/guard";
 import { parseDollarsToCents } from "@/lib/budget/mutate";
 import { saveTaxYearAdjustment } from "@/lib/reports/mutate";
 
-export type FormState = { ok: false; error: string } | undefined;
+const FIELDS = ["rentalManagementFee", "rentalMortgageInterest"] as const;
+
+export type FormState =
+  | {
+      ok: false;
+      error: string;
+      /**
+       * What was submitted, echoed back so a typo in one field doesn't cost
+       * a valid entry in the other.
+       *
+       * This has to come from the server: React resets an uncontrolled
+       * input once a form action resolves, so `defaultValue` seeded only
+       * from the persisted props loses whatever was just typed. The form
+       * pairs this with `attempt` as a `key` to force the remount that
+       * makes the new `defaultValue`s take — same pattern as
+       * `transactions/actions.ts`.
+       */
+      values?: Record<string, string>;
+      /** Increments per submit, so two identical failures still re-seed. */
+      attempt?: number;
+    }
+  | undefined;
 
 const UNAUTHORISED: FormState = {
   ok: false,
   error: "Your session has expired. Reload the page and sign in again.",
 };
+
+function submittedValues(formData: FormData): Record<string, string> {
+  return Object.fromEntries(
+    FIELDS.map((field) => [field, String(formData.get(field) ?? "")]),
+  );
+}
 
 /**
  * A dollar field that may legitimately be blank.
@@ -39,31 +66,34 @@ function parseOptionalDollars(
 }
 
 export async function saveTaxYearAdjustmentAction(
-  _previous: FormState,
+  previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
   if (!(await hasSession())) return UNAUTHORISED;
 
+  const values = submittedValues(formData);
+  const attempt = (previous?.attempt ?? 0) + 1;
+  const reject = (error: string): FormState => ({ ok: false, error, values, attempt });
+
   const fyLabel = String(formData.get("fyLabel") ?? "");
   if (!/^FY\d{4}$/.test(fyLabel)) {
-    return { ok: false, error: "That financial year is not valid. Reload and try again." };
+    return reject("That financial year is not valid. Reload and try again.");
   }
 
   const managementFee = parseOptionalDollars(formData.get("rentalManagementFee"));
   const mortgageInterest = parseOptionalDollars(formData.get("rentalMortgageInterest"));
 
   if (!managementFee.ok || !mortgageInterest.ok) {
-    return {
-      ok: false,
-      error: "Both figures must be a dollar amount or left blank. Nothing was saved.",
-    };
+    return reject(
+      "Both figures must be a dollar amount or left blank. Nothing was saved.",
+    );
   }
 
   const result = await saveTaxYearAdjustment(fyLabel, {
     rentalManagementFeeCents: managementFee.cents,
     rentalMortgageInterestCents: mortgageInterest.cents,
   });
-  if (!result.ok) return { ok: false, error: result.error };
+  if (!result.ok) return reject(result.error);
 
   revalidatePath("/reports/ir3");
   return undefined;

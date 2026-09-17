@@ -562,7 +562,7 @@ export async function getIr3Pack(
     adjustment,
     rental: computeRentalFigures(personalCategories, adjustment),
     business: computeBusinessFigures(businessCategories),
-    homeOffice: computeHomeOfficeFigures(personalCategories),
+    homeOffice: computeHomeOfficeFigures(personalCategories, fy.label),
     taxableIncome: computeTaxableIncomeFigures(personalCategories),
     personalQuality,
     businessQuality,

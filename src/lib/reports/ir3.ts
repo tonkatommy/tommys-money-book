@@ -20,8 +20,17 @@
 
 import type { CategoryTotal } from "./query";
 
-/** IRD's home office apportionment rate for the 2026/27 year. */
+/**
+ * IRD's home office apportionment rate, and the one FY it is verified for.
+ *
+ * IRD publishes a new determination most years, and this file does not
+ * invent rates for years it hasn't been told — `computeHomeOfficeFigures`
+ * takes the FY being reported and flags a caveat whenever it isn't this one,
+ * rather than silently applying FY2027's rate to every year the FY selector
+ * offers.
+ */
 export const HOME_OFFICE_RATE = 0.1257;
+export const HOME_OFFICE_RATE_FY_LABEL = "FY2027";
 
 // Categories the IR3 math has to recognise individually, not just by tax
 // tag — seven categories carry RENTAL_EXPENSE and only one of them needs its
@@ -68,8 +77,15 @@ export type RentalExpenseLine = {
 
 export type RentalFigures = {
   netRentReceivedCents: number;
-  /** 0 when the adjustment has not been entered for this FY. */
+  /**
+   * 0 both when the adjustment has not been entered for this FY and when it
+   * was genuinely entered as $0 — use `managementFeeEntered` to tell those
+   * two apart. Callers that need to say "not entered" must check the flag,
+   * not this value: `=== 0` would misdescribe a confirmed zero.
+   */
   managementFeeCents: number;
+  /** Whether `TaxYearAdjustment.rentalManagementFeeCents` is set for this FY, regardless of its value. */
+  managementFeeEntered: boolean;
   /** Net rent received + the management fee, grossed up for the IR3. */
   grossIncomeCents: number;
   expenseLines: RentalExpenseLine[];
@@ -109,8 +125,9 @@ export function computeRentalFigures(
         category.taxTag === "RENTAL_INCOME",
     )?.totalCents ?? 0;
 
+  const managementFeeEntered = adjustment.rentalManagementFeeCents !== null;
   const managementFeeCents = adjustment.rentalManagementFeeCents ?? 0;
-  if (adjustment.rentalManagementFeeCents === null) {
+  if (!managementFeeEntered) {
     warnings.push(
       "The Ray White management fee has not been entered for this financial " +
         "year. Gross rental income and the management fee deduction are both " +
@@ -142,7 +159,13 @@ export function computeRentalFigures(
   }
 
   const mortgageInterestCents = adjustment.rentalMortgageInterestCents;
-  if (mortgagePaymentsCents > 0 && mortgageInterestCents === null) {
+  // Gated on the category being present in range, not on its net total being
+  // positive: the mortgage category can include a reversed/failed direct
+  // debit (definitions.ts's own "sovereign ac - (reversal)" rule), which can
+  // net a genuine range of mortgage activity to zero or negative. Gating on
+  // the net amount would silently suppress this warning in exactly the range
+  // where the missing-interest exclusion below is doing the most work.
+  if (mortgageCategory && mortgageInterestCents === null) {
     warnings.push(
       `The mortgage interest for this financial year has not been entered ` +
         `from the ASB loan statement. "${RENTAL_MORTGAGE_CATEGORY_NAME}" is ` +
@@ -186,6 +209,7 @@ export function computeRentalFigures(
   return {
     netRentReceivedCents,
     managementFeeCents,
+    managementFeeEntered,
     grossIncomeCents,
     expenseLines,
     mortgagePaymentsCents,
@@ -261,6 +285,9 @@ export type HomeOfficeFigures = {
   lines: { name: string; totalCents: number }[];
   eligibleCents: number;
   deductionCents: number;
+  /** True when `fyLabel` isn't the one HOME_OFFICE_RATE is verified for. */
+  rateUnconfirmed: boolean;
+  caveats: string[];
 };
 
 /**
@@ -272,9 +299,17 @@ export type HomeOfficeFigures = {
  * true: it reads by tag, not by book. `categories` should therefore be
  * `categoryTotals(PERSONAL, ...)`, the same read `computeRentalFigures`
  * uses, not a business-book read.
+ *
+ * `fyLabel` is the FY being reported, e.g. `fy.label` from `reports/fy.ts`.
+ * The IR3 pack can be viewed for any year `selectableFYs` offers, but
+ * `HOME_OFFICE_RATE` is only verified against `HOME_OFFICE_RATE_FY_LABEL` —
+ * IRD publishes a new determination most years, and this file has no other
+ * year's rate to use, so a different FY gets a caveat instead of a silently
+ * reused number.
  */
 export function computeHomeOfficeFigures(
   categories: CategoryTotal[],
+  fyLabel: string,
 ): HomeOfficeFigures {
   const lines = categories
     .filter((category) => category.taxTag === "HOME_OFFICE")
@@ -282,7 +317,24 @@ export function computeHomeOfficeFigures(
 
   const eligibleCents = lines.reduce((total, line) => total + line.totalCents, 0);
 
-  return { lines, eligibleCents, deductionCents: homeOfficeDeductionCents(eligibleCents) };
+  const rateUnconfirmed = fyLabel !== HOME_OFFICE_RATE_FY_LABEL;
+  const caveats: string[] = [];
+  if (rateUnconfirmed) {
+    caveats.push(
+      `The ${(HOME_OFFICE_RATE * 100).toFixed(2)}% rate used here is IRD's ` +
+        `determination for ${HOME_OFFICE_RATE_FY_LABEL}. IRD publishes a new ` +
+        `home office rate most years — confirm the correct rate for ` +
+        `${fyLabel} before relying on this deduction.`,
+    );
+  }
+
+  return {
+    lines,
+    eligibleCents,
+    deductionCents: homeOfficeDeductionCents(eligibleCents),
+    rateUnconfirmed,
+    caveats,
+  };
 }
 
 export type TaxableIncomeFigures = {

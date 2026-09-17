@@ -24,11 +24,11 @@ import { saveTaxYearAdjustmentAction, type FormState } from "./actions";
  */
 function OptionalAmountField({
   name,
-  valueCents,
+  defaultText,
   ariaLabel,
 }: {
   name: string;
-  valueCents: number | null;
+  defaultText: string;
   ariaLabel: string;
 }) {
   return (
@@ -38,7 +38,7 @@ function OptionalAmountField({
         name={name}
         inputMode="decimal"
         placeholder="not entered"
-        defaultValue={valueCents === null ? "" : centsToDollars(valueCents).toFixed(2)}
+        defaultValue={defaultText}
         aria-label={ariaLabel}
         style={{ width: 110 }}
       />
@@ -60,8 +60,20 @@ export function AdjustmentsForm({
     undefined,
   );
 
+  // React resets an uncontrolled input once a form action resolves, so a
+  // rejected submit (a typo in one field) would otherwise blank the other,
+  // valid one too. The action echoes what was posted in `state.values`;
+  // `key={attempt}` on the form below forces the remount that makes the new
+  // `defaultValue`s take, and `attempt` incrementing is what makes two
+  // identical failures still re-seed — same pattern as
+  // `transactions/new/form.tsx`.
+  const asText = (cents: number | null): string =>
+    cents === null ? "" : centsToDollars(cents).toFixed(2);
+  const seed = (field: string, persistedCents: number | null): string =>
+    state?.values?.[field] ?? asText(persistedCents);
+
   return (
-    <form action={formAction}>
+    <form key={state?.attempt ?? 0} action={formAction}>
       <input type="hidden" name="fyLabel" value={fyLabel} />
 
       <Card
@@ -100,7 +112,7 @@ export function AdjustmentsForm({
           >
             <OptionalAmountField
               name="rentalManagementFee"
-              valueCents={rentalManagementFeeCents}
+              defaultText={seed("rentalManagementFee", rentalManagementFeeCents)}
               ariaLabel="Ray White management fee, annual total"
             />
           </FormField>
@@ -111,7 +123,7 @@ export function AdjustmentsForm({
           >
             <OptionalAmountField
               name="rentalMortgageInterest"
-              valueCents={rentalMortgageInterestCents}
+              defaultText={seed("rentalMortgageInterest", rentalMortgageInterestCents)}
               ariaLabel="ASB mortgage interest, annual total"
             />
           </FormField>
