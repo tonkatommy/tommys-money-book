@@ -150,6 +150,56 @@ describe("computeRentalFigures", () => {
       false,
     );
   });
+
+  it("caps a mistyped interest figure at what was actually paid, and warns", () => {
+    // $20,000 entered against only $18,000 of mortgage payments this FY.
+    const figures = computeRentalFigures(categories, {
+      rentalManagementFeeCents: 1_800_00,
+      rentalMortgageInterestCents: 20_000_00,
+    });
+
+    // The raw entered figure is preserved for display...
+    expect(figures.mortgageInterestCents).toBe(20_000_00);
+    // ...but never used for the deduction, which cannot exceed what was paid.
+    expect(figures.mortgageInterestUsedCents).toBe(18_000_00);
+    expect(figures.mortgagePrincipalCents).toBe(0);
+    expect(figures.deductibleExpenseCents).toBe(2_400_00 + 1_200_00 + 1_800_00 + 18_000_00);
+    expect(figures.warnings.some((warning) => /more than the total paid/i.test(warning))).toBe(
+      true,
+    );
+  });
+
+  it("does not cap or warn when the entered interest is within what was paid", () => {
+    const figures = computeRentalFigures(categories, {
+      rentalManagementFeeCents: 1_800_00,
+      rentalMortgageInterestCents: 18_000_00,
+    });
+
+    expect(figures.mortgageInterestUsedCents).toBe(18_000_00);
+    expect(figures.mortgagePrincipalCents).toBe(0);
+    expect(figures.warnings.some((warning) => /more than the total paid/i.test(warning))).toBe(
+      false,
+    );
+  });
+
+  it("warns instead of treating a missing rental income category as zero rent", () => {
+    const withoutIncome = categories.filter(
+      (c) => c.name !== "Rental Income — Cashel St",
+    );
+
+    const figures = computeRentalFigures(withoutIncome, {
+      rentalManagementFeeCents: 1_800_00,
+      rentalMortgageInterestCents: 15_000_00,
+    });
+
+    expect(figures.netRentReceivedCents).toBe(0);
+    // Gross income is only the management fee — a small, plausible-looking
+    // number that would otherwise carry no sign anything is wrong.
+    expect(figures.grossIncomeCents).toBe(1_800_00);
+    expect(
+      figures.warnings.some((warning) => warning.includes("Rental Income — Cashel St")),
+    ).toBe(true);
+  });
 });
 
 describe("computeBusinessFigures", () => {

@@ -35,6 +35,7 @@ function OptionalAmountField({
     <span className="mb-amount">
       <span aria-hidden="true">$</span>
       <input
+        id={name}
         name={name}
         inputMode="decimal"
         placeholder="not entered"

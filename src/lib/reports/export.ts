@@ -135,7 +135,7 @@ export function buildIr3Workbook(pack: Ir3Pack): ExcelJS.Workbook {
       addLine(
         rentalSheet,
         `${line.name} — interest only`,
-        rental.mortgageInterestCents ?? 0,
+        rental.mortgageInterestUsedCents,
         rental.mortgageInterestCents === null
           ? `excluded — of ${centsToDollars(rental.mortgagePaymentsCents).toFixed(2)} paid, interest not entered`
           : `${centsToDollars(rental.mortgagePrincipalCents).toFixed(2)} principal (not deductible) of ${centsToDollars(rental.mortgagePaymentsCents).toFixed(2)} paid`,

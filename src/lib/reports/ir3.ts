@@ -91,9 +91,11 @@ export type RentalFigures = {
   expenseLines: RentalExpenseLine[];
   /** The bank-fed total for the mortgage category — principal AND interest. */
   mortgagePaymentsCents: number;
-  /** From the adjustment. Null means "not entered" — the mortgage line is then excluded from `deductibleExpenseCents` entirely. */
+  /** As entered on the adjustment form. Null means "not entered". May exceed `mortgagePaymentsCents` if mistyped — see `mortgageInterestUsedCents`. */
   mortgageInterestCents: number | null;
-  /** `mortgagePaymentsCents - mortgageInterestCents`, or 0 when interest isn't known. */
+  /** The interest actually counted in `deductibleExpenseCents`: 0 when not entered, capped at `mortgagePaymentsCents` when the entered figure was too large. */
+  mortgageInterestUsedCents: number;
+  /** `mortgagePaymentsCents - mortgageInterestUsedCents`, or 0 when interest isn't known. */
   mortgagePrincipalCents: number;
   /** Every RENTAL_EXPENSE line except the non-deductible mortgage principal. */
   deductibleExpenseCents: number;
@@ -118,12 +120,27 @@ export function computeRentalFigures(
 ): RentalFigures {
   const warnings: string[] = [];
 
-  const netRentReceivedCents =
-    categories.find(
-      (category) =>
-        category.name === RENTAL_INCOME_CATEGORY_NAME &&
-        category.taxTag === "RENTAL_INCOME",
-    )?.totalCents ?? 0;
+  const rentalIncomeCategory = categories.find(
+    (category) =>
+      category.name === RENTAL_INCOME_CATEGORY_NAME &&
+      category.taxTag === "RENTAL_INCOME",
+  );
+  const netRentReceivedCents = rentalIncomeCategory?.totalCents ?? 0;
+
+  // Same reasoning as the mortgage category below: `categories` only
+  // contains rows with a transaction in range, so a missing category here
+  // is indistinguishable from a genuinely quiet FY and from every rental
+  // payment having been miscategorised out from under this hardcoded name.
+  // Left unwarned, a missing category would show a small, plausible gross
+  // income (just the management fee, if entered) with nothing to say that
+  // the actual rent is absent — the specific failure this app is built to
+  // avoid.
+  if (!rentalIncomeCategory) {
+    warnings.push(
+      `No transactions were found in "${RENTAL_INCOME_CATEGORY_NAME}" for ` +
+        `this financial year.`,
+    );
+  }
 
   const managementFeeEntered = adjustment.rentalManagementFeeCents !== null;
   const managementFeeCents = adjustment.rentalManagementFeeCents ?? 0;
@@ -174,9 +191,30 @@ export function computeRentalFigures(
     );
   }
 
-  const mortgagePrincipalCents =
+  // A year cannot pay more interest than it paid in total. An entered figure
+  // above the mortgage category's own total for this FY is almost always a
+  // typo or the wrong year's statement, and `Math.max(0, ...)` below would
+  // otherwise clamp `mortgagePrincipalCents` to 0 while `deductibleExpenseCents`
+  // still added the full, too-large interest figure — deducting more than
+  // the whole repayment. The deduction is capped at what was actually paid;
+  // `mortgageInterestCents` itself is left as entered so the figure on
+  // screen still matches what was typed, for Tommy to notice and correct.
+  const deductibleMortgageInterestCents =
     mortgageInterestCents !== null
-      ? Math.max(0, mortgagePaymentsCents - mortgageInterestCents)
+      ? Math.min(mortgageInterestCents, mortgagePaymentsCents)
+      : null;
+  if (mortgageInterestCents !== null && mortgageInterestCents > mortgagePaymentsCents) {
+    warnings.push(
+      `The entered mortgage interest is more than the total paid on ` +
+        `"${RENTAL_MORTGAGE_CATEGORY_NAME}" this financial year — check it ` +
+        `against the ASB statement. The deduction is capped at the amount ` +
+        `actually paid until it's corrected.`,
+    );
+  }
+
+  const mortgagePrincipalCents =
+    deductibleMortgageInterestCents !== null
+      ? Math.max(0, mortgagePaymentsCents - deductibleMortgageInterestCents)
       : 0;
 
   const expenseLines: RentalExpenseLine[] = rentalExpenseCategories.map(
@@ -198,13 +236,14 @@ export function computeRentalFigures(
   }
 
   // Every deductible line except the mortgage, plus only the interest
-  // portion of the mortgage (0 when it isn't known yet) — never the full
+  // actually counted for the mortgage (0 when it isn't known yet, capped at
+  // what was paid when the entered figure was too large) — never the full
   // bank-fed repayment, which would silently include the principal.
+  const mortgageInterestUsedCents = deductibleMortgageInterestCents ?? 0;
   const nonMortgageExpenseCents = expenseLines
     .filter((line) => !line.isMortgage)
     .reduce((total, line) => total + line.totalCents, 0);
-  const deductibleExpenseCents =
-    nonMortgageExpenseCents + (mortgageInterestCents ?? 0);
+  const deductibleExpenseCents = nonMortgageExpenseCents + mortgageInterestUsedCents;
 
   return {
     netRentReceivedCents,
@@ -214,6 +253,7 @@ export function computeRentalFigures(
     expenseLines,
     mortgagePaymentsCents,
     mortgageInterestCents,
+    mortgageInterestUsedCents,
     mortgagePrincipalCents,
     deductibleExpenseCents,
     netCents: grossIncomeCents - deductibleExpenseCents,

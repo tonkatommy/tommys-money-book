@@ -9,8 +9,7 @@
 
 import { revalidatePath } from "next/cache";
 import { hasSession } from "@/lib/auth/guard";
-import { parseDollarsToCents } from "@/lib/budget/mutate";
-import { saveTaxYearAdjustment } from "@/lib/reports/mutate";
+import { parseOptionalDollars, saveTaxYearAdjustment } from "@/lib/reports/mutate";
 
 const FIELDS = ["rentalManagementFee", "rentalMortgageInterest"] as const;
 
@@ -44,25 +43,6 @@ function submittedValues(formData: FormData): Record<string, string> {
   return Object.fromEntries(
     FIELDS.map((field) => [field, String(formData.get(field) ?? "")]),
   );
-}
-
-/**
- * A dollar field that may legitimately be blank.
- *
- * `parseDollarsToCents` returns `null` for both "" and "abc" — budgets have
- * no use for that distinction because every category needs a real amount,
- * but this form does: blank means "not entered yet" (stored as SQL NULL,
- * which is what makes `computeRentalFigures` warn instead of assuming a
- * figure), while "abc" is a typo that must not silently become NULL either.
- */
-function parseOptionalDollars(
-  raw: FormDataEntryValue | null,
-): { ok: true; cents: number | null } | { ok: false } {
-  const text = String(raw ?? "").trim();
-  if (text === "") return { ok: true, cents: null };
-
-  const cents = parseDollarsToCents(text);
-  return cents === null ? { ok: false } : { ok: true, cents };
 }
 
 export async function saveTaxYearAdjustmentAction(

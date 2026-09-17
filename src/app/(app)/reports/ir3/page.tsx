@@ -18,7 +18,7 @@
 import { AppShell } from "@/components/app-shell";
 import { Alert, ButtonLink, Card } from "@/components/ui/primitives";
 import { Figure, KV, ScreenHead } from "@/components/ui/data";
-import { formatNZD, formatNZDWhole } from "@/lib/money";
+import { formatNZD } from "@/lib/money";
 import { parseBook, resolvePeriod } from "@/lib/budget/query";
 import { parseFY, selectableFYs } from "@/lib/reports/fy";
 import { getIr3Pack } from "@/lib/reports/query";
@@ -140,9 +140,7 @@ export default async function Ir3Page({
                 key={line.name}
                 name={line.name}
                 totalCents={
-                  line.isMortgage
-                    ? (rental.mortgageInterestCents ?? 0)
-                    : line.totalCents
+                  line.isMortgage ? rental.mortgageInterestUsedCents : line.totalCents
                 }
                 hint={
                   line.isMortgage
@@ -285,7 +283,7 @@ export default async function Ir3Page({
             ))}
           </div>
           <div style={{ paddingTop: "var(--space-4)", borderTop: "1px solid var(--border-subtle)" }}>
-            <KV label="Total" value={formatNZDWhole(taxableIncome.totalCents)} />
+            <KV label="Total" value={formatNZD(taxableIncome.totalCents)} />
           </div>
         </Card>
 
