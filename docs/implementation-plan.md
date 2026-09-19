@@ -518,10 +518,32 @@ different provider account · Energy Solution Providers is the employer from
 20/07/2026 and becomes the main income source · `akahuNames` folded into
 `CategoryRule`.
 
-**Open questions for you:** where reports for Garreth should land (email vs
-folder); whether Vehicle_Logbook.xlsx eventually joins the app; whether the AIA
-treatment and the Cashel St mortgage interest split need confirming with Garreth
-before the first IR3.
+**Phase 4a decisions (16–17/09/2026):** the IR3 pack scoped as its own
+sub-phase (4a), the same way Phase 3 split into 3a/3b/3c — budget vs actual
+and savings goals become 4b/4c, since neither shares a data layer with the
+IR3 pack and specifying all three at once meant specifying two nobody was
+waiting on yet · the two figures the bank feed structurally cannot see (the
+Ray White management fee, the ASB mortgage interest) are captured through a
+form and a `TaxYearAdjustment` row per FY rather than a CLI script — a
+number typed once a year off a paper statement isn't the bulk/dry-run
+operation the CLI convention exists for · xlsx export via `exceljs` over
+`xlsx`/SheetJS: better formatting for a document an accountant reads, and
+worth noting `exceljs` also turned out to be the safer default on the npm
+registry, not just the nicer one — SheetJS's own security-patched releases
+have lagged behind what's published to npm · export is a download button
+only; Tommy forwards it to Garreth himself, so "where reports land" needed
+no separate decision · an implausible manual figure (mortgage interest
+entered above what was actually paid that year) is capped at the plausible
+maximum and warned about, not silently accepted or hard-rejected — the same
+"never silently wrong" principle the sync and matcher already apply, now
+extended to a number a human typed in.
+
+**Open questions for you:** whether Vehicle_Logbook.xlsx eventually joins the
+app; the AIA treatment, the entertainment 50% limit, and the Cashel St
+mortgage interest figure all need confirming with Garreth before the first
+filed IR3 — reconciliation against the real Ray White/ASB statements is
+underway as of 17/09/2026, screen figures already checked out against what
+was entered.
 
 **Answered:** how far back each bank's Akahu history reaches — 16/07/2025,
 about 12 months, not the hoped-for 24 (Phase 1). FY2027 is therefore fully
