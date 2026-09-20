@@ -218,9 +218,18 @@ export default async function BudgetHistoryPage({
                     ) : (
                       <>
                         {formatNZD(p.spentCents)}
-                        {p.unbudgetedSpentCents !== 0 && (
+                        {/* Refunds can push unbudgeted spending negative, and
+                            "+ -$20.00" is not a sentence. A net refund is
+                            money coming back, so it says that instead. */}
+                        {p.unbudgetedSpentCents > 0 && (
                           <div style={{ ...muted, marginTop: 2 }}>
                             + {formatNZD(p.unbudgetedSpentCents)} not budgeted
+                          </div>
+                        )}
+                        {p.unbudgetedSpentCents < 0 && (
+                          <div style={{ ...muted, marginTop: 2 }}>
+                            {formatNZD(Math.abs(p.unbudgetedSpentCents))} refunded,
+                            outside the budget
                           </div>
                         )}
                       </>

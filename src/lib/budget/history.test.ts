@@ -1,3 +1,12 @@
+// The budget-history arithmetic: which row applies to a period, whether its
+// carryover counts, and every case where a missing budget must stay absent
+// rather than becoming a zero someone reads as an overspend.
+//
+// The two cases worth knowing about before changing anything here: an
+// inherited carryover must not re-apply (it would compound every month), and
+// a period with no budget row is excluded from the counts, the averages and
+// the hints — not treated as a $0 budget the whole spend is over.
+
 import { describe, expect, it } from "vitest";
 import { payPeriodFor, previousPeriods, utcDate } from "./period";
 import {
