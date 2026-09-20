@@ -463,6 +463,14 @@ export default async function BudgetPage({
                   value={`in ${period.daysLeft + 1} day${period.daysLeft === 0 ? "" : "s"}`}
                 />
               </div>
+              {/* A link here rather than a nav item: the bottom tab bar
+                  already shares its width between seven. */}
+              <Link
+                href={withBook("/budget/history", book)}
+                style={{ fontSize: "var(--text-sm)" }}
+              >
+                How past periods went
+              </Link>
             </div>
           </Card>
         </div>
