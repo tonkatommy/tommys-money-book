@@ -204,16 +204,26 @@ export default async function BudgetHistoryPage({
                     )}
                   </td>
 
+                  {/* Spending outside the budget is kept as its own figure:
+                      dropped, the period silently shrinks; merged, it reads as
+                      an overspend of money nobody budgeted. With no budget at
+                      all it IS the period's spending, so it prints as the
+                      figure rather than as a footnote under a dash. */}
                   <td className="mb-num" style={numeric}>
-                    {p.allowanceCents === null ? "—" : formatNZD(p.spentCents)}
-                    {/* Spending outside the budget, kept as its own figure:
-                        dropped, the period shrinks; merged, it reads as an
-                        overspend of money nobody budgeted. */}
-                    {p.unbudgetedSpentCents !== 0 && (
-                      <div style={{ ...muted, marginTop: 2 }}>
-                        {p.allowanceCents === null ? "" : "+ "}
-                        {formatNZD(p.unbudgetedSpentCents)} not budgeted
-                      </div>
+                    {p.allowanceCents === null ? (
+                      <>
+                        {formatNZD(p.unbudgetedSpentCents)}
+                        <div style={{ ...muted, marginTop: 2 }}>none of it budgeted</div>
+                      </>
+                    ) : (
+                      <>
+                        {formatNZD(p.spentCents)}
+                        {p.unbudgetedSpentCents !== 0 && (
+                          <div style={{ ...muted, marginTop: 2 }}>
+                            + {formatNZD(p.unbudgetedSpentCents)} not budgeted
+                          </div>
+                        )}
+                      </>
                     )}
                   </td>
 
@@ -273,11 +283,18 @@ export default async function BudgetHistoryPage({
                 <div style={{ minWidth: 0 }}>
                   <CategoryTag name={category.name} book={category.book} />
                   <div style={{ ...muted, marginTop: 4 }}>
+                    {/* "over in 0 of 2" is the sort key read out loud. The
+                        categories that never went over are the ones a reader
+                        skips, so they say so in words. */}
                     {summary.budgetedCount === 0
                       ? "no budget in these periods"
-                      : `over in ${summary.overCount} of ${summary.budgetedCount} budgeted period${
-                          summary.budgetedCount === 1 ? "" : "s"
-                        }`}
+                      : summary.overCount === 0
+                        ? `never over, in ${summary.budgetedCount} budgeted period${
+                            summary.budgetedCount === 1 ? "" : "s"
+                          }`
+                        : `over in ${summary.overCount} of ${summary.budgetedCount} budgeted period${
+                            summary.budgetedCount === 1 ? "" : "s"
+                          }`}
                   </div>
                 </div>
                 <div className="mb-num" style={{ textAlign: "right", fontSize: "var(--text-sm)" }}>
