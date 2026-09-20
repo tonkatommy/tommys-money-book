@@ -1,3 +1,15 @@
+// The automatic matcher: which rule wins, and which category may be attached.
+//
+// Two separate things are pinned here. Specificity — DESCRIPTION beats
+// MERCHANT beats AKAHU_CATEGORY, and no scope may promote a rule past
+// another field's tier — because a rule that swallows a more specific one
+// files money under the wrong tax treatment and nothing looks broken. IAG is
+// three policies and only the landlord one is deductible.
+//
+// And book safety: a category from the other book is never assigned, and an
+// account with no book matches nothing rather than defaulting to personal.
+// A book leak is invisible once written.
+
 import { describe, expect, it } from "vitest";
 
 import {

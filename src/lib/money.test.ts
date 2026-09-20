@@ -1,3 +1,13 @@
+// Money conversion, where floating point would quietly bias the ledger.
+//
+// `1.005 * 100` is 100.49999999999999 in binary floating point, so the naive
+// conversion rounds the wrong way and every affected amount is out by a cent
+// in the same direction. Nothing crashes; the books just drift.
+//
+// Hence the cases: the amounts that break naive maths, rounding half away
+// from zero symmetrically, never returning a negative zero, throwing rather
+// than writing a corrupt amount, and staying exact down a long column.
+
 import { describe, expect, it } from "vitest";
 
 import { centsToDollars, dollarsToCents, formatNZD } from "./money";
