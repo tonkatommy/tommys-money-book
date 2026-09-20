@@ -24,8 +24,19 @@ import {
   previousPeriods,
   type PayPeriod,
 } from "./period";
-import { allowanceCents, budgetTotals, type BudgetTotals } from "./totals";
+import { budgetTotals, type BudgetTotals } from "./totals";
 import { detectRecurring, type RecurringSuggestion } from "./recurring";
+import {
+  allowanceFor,
+  budgetHint,
+  latestRows,
+  periodTotal,
+  summariseCategory,
+  type BudgetHint,
+  type CategorySummary,
+  type PeriodCell,
+  type PeriodTotal,
+} from "./history";
 
 /** How many past periods the budget suggestions average over. */
 export const SUGGESTION_PERIODS = 3;
@@ -148,7 +159,9 @@ export function parseBook(value?: string): Book {
  *
  * A period with no rows is NOT an empty budget: each category falls back to
  * its most recent row on or before the period, so a budget continues until
- * someone changes it (see the schema comment on CategoryBudget).
+ * someone changes it (see the schema comment on CategoryBudget). The rule
+ * itself is `latestRows` in `history.ts`, shared with the history screen so
+ * the two can't disagree about which row applied.
  */
 async function resolveBudgets(book: Book, period: PayPeriod) {
   const rows = await prisma.categoryBudget.findMany({
@@ -156,15 +169,9 @@ async function resolveBudgets(book: Book, period: PayPeriod) {
       periodStart: { lte: period.start },
       category: { book, kind: "EXPENSE" },
     },
-    orderBy: { periodStart: "desc" },
   });
 
-  const latest = new Map<string, (typeof rows)[number]>();
-  for (const row of rows) {
-    if (!latest.has(row.categoryId)) latest.set(row.categoryId, row);
-  }
-
-  return { latest, anyRows: rows.length > 0 };
+  return { latest: latestRows(rows, period), anyRows: rows.length > 0 };
 }
 
 /** Sum actual spending per category over a date range, as positive cents. */
@@ -218,15 +225,10 @@ async function categoryViews(
     const row = budgets.latest.get(category.id);
     const spentCents = spent.get(category.id) ?? 0;
 
-    // Carryover applies only when the row belongs to THIS period. An
-    // inherited row's carryover was a one-off correction for the period it
-    // was written for; re-applying it every month afterwards would compound.
-    const carryoverCents =
-      row && row.periodStart.getTime() === period.start.getTime()
-        ? row.carryoverCents
-        : 0;
-
-    const standingCents = row?.amountCents ?? 0;
+    // Carryover only in the period the row was written for — `allowanceFor`
+    // carries the rule and the reason. Null (no row) reads as zero on this
+    // screen, which flags it separately as `unbudgeted`.
+    const allowance = allowanceFor(row, period);
     const dueDay = row?.dueDay ?? null;
 
     return {
@@ -234,9 +236,9 @@ async function categoryViews(
       name: category.name,
       book: category.book,
       taxTag: category.taxTag,
-      standingCents,
-      carryoverCents,
-      budgetCents: allowanceCents(standingCents, carryoverCents),
+      standingCents: allowance?.standingCents ?? 0,
+      carryoverCents: allowance?.carryoverCents ?? 0,
+      budgetCents: allowance?.allowanceCents ?? 0,
       spentCents,
       isFixed: row?.isFixed ?? false,
       dueDay,
@@ -479,16 +481,12 @@ export async function getReviewView(
   const lines = categories
     .map((category) => {
       const row = previousBudgets.latest.get(category.id);
-      const carryoverCents =
-        row && row.periodStart.getTime() === previous.start.getTime()
-          ? row.carryoverCents
-          : 0;
 
       return {
         categoryId: category.id,
         name: category.name,
         book: category.book,
-        budgetCents: allowanceCents(row?.amountCents ?? 0, carryoverCents),
+        budgetCents: allowanceFor(row, previous)?.allowanceCents ?? 0,
         spentCents: spent.get(category.id) ?? 0,
         budgetedThisPeriod: budgetedNow.has(category.id),
       };
@@ -581,4 +579,154 @@ export async function getTransactions(
   });
 
   return annotated.reverse();
+}
+
+/** How many complete past periods the history screen shows. 4b spec §2. */
+export const HISTORY_PERIODS = 6;
+
+export type HistoryCategory = {
+  categoryId: string;
+  name: string;
+  book: Book;
+  isFixed: boolean;
+  /** One per window period, oldest first. */
+  cells: PeriodCell[];
+  summary: CategorySummary;
+  /** The standing budget in the running period. Null if there is none. */
+  currentStandingCents: number | null;
+  hint: BudgetHint | null;
+};
+
+export type HistoryPeriod = PeriodTotal & {
+  /** Transactions in this period with no category — they understate it. */
+  uncategorisedCount: number;
+};
+
+export type BudgetHistoryView = {
+  book: Book;
+  /** The running period, which the window deliberately stops short of. */
+  current: PayPeriod;
+  /** The window's totals, oldest first. */
+  periods: HistoryPeriod[];
+  /** Categories with a budget or spending somewhere in the window. */
+  categories: HistoryCategory[];
+  hints: (BudgetHint & { name: string })[];
+  uncategorisedCount: number;
+  unassignedAccountCount: number;
+  /** No budget has ever been set for this book. */
+  isFirstRun: boolean;
+};
+
+/**
+ * Budget vs actual across the six complete periods before `current`.
+ *
+ * The running period is left out rather than shown partial: on day 5 every
+ * category looks under budget, which is arithmetic, not information — the
+ * same reason the overview carries `averageIncomeCents`. 4b spec §2.
+ *
+ * Every budget figure goes through `latestRows` and `allowanceFor`, the same
+ * two functions behind the overview and the review, so no screen can
+ * disagree with another about what a month's budget was.
+ */
+export async function getBudgetHistory(
+  book: Book,
+  current: PayPeriod,
+  settings: BudgetSettingsView,
+): Promise<BudgetHistoryView> {
+  const window = previousPeriods(current, HISTORY_PERIODS, settings.anchorDay).reverse();
+
+  const [categories, rows, spentByPeriod, uncategorisedByPeriod, unassignedAccountCount] =
+    await Promise.all([
+      prisma.category.findMany({
+        where: { book, kind: "EXPENSE" },
+        orderBy: { name: "asc" },
+      }),
+      // One read for every period, resolved per period in memory by
+      // `latestRows`, rather than six round trips re-reading overlapping
+      // rows. Up to the RUNNING period's start, not the window's end, because
+      // the hint compares against the budget as it stands now.
+      prisma.categoryBudget.findMany({
+        where: {
+          periodStart: { lte: current.start },
+          category: { book, kind: "EXPENSE" },
+        },
+      }),
+      // One `spentByCategory` per period, so "what counts as spent" stays
+      // defined in one place. Bucketing one big query by date here would be a
+      // second definition of the period boundary.
+      Promise.all(window.map((p) => spentByCategory(book, p.start, p.end))),
+      Promise.all(
+        window.map((p) =>
+          prisma.transaction.count({
+            where: {
+              date: { gte: p.start, lte: p.end },
+              categoryId: null,
+              account: { book },
+            },
+          }),
+        ),
+      ),
+      prisma.account.count({ where: { book: null } }),
+    ]);
+
+  const rowsByPeriod = window.map((p) => latestRows(rows, p));
+  const now = latestRows(rows, current);
+
+  const history = categories
+    .map((category): HistoryCategory => {
+      const cells = window.map((p, i) => ({
+        period: p,
+        allowance: allowanceFor(rowsByPeriod[i].get(category.id), p),
+        spentCents: spentByPeriod[i].get(category.id) ?? 0,
+      }));
+
+      const currentRow = now.get(category.id);
+      const currentStandingCents = allowanceFor(currentRow, current)?.standingCents ?? null;
+      const isFixed = currentRow?.isFixed ?? false;
+
+      return {
+        categoryId: category.id,
+        name: category.name,
+        book: category.book,
+        isFixed,
+        cells,
+        summary: summariseCategory(cells),
+        currentStandingCents,
+        hint: budgetHint({
+          categoryId: category.id,
+          cells,
+          currentStandingCents,
+          isFixed,
+          estimated: currentRow?.estimated ?? false,
+        }),
+      };
+    })
+    // Same "63 categories, a month touches a fraction" filter as the overview:
+    // no budget and no spending anywhere in the window is noise.
+    .filter(
+      (category) =>
+        category.summary.budgetedCount > 0 ||
+        category.cells.some((cell) => cell.spentCents !== 0),
+    );
+
+  const periods = window.map((p, i) => ({
+    ...periodTotal(
+      p,
+      history.map((category) => category.cells[i]),
+    ),
+    uncategorisedCount: uncategorisedByPeriod[i],
+  }));
+
+  return {
+    book,
+    current,
+    periods,
+    categories: history,
+    hints: history.flatMap((category) =>
+      category.hint ? [{ ...category.hint, name: category.name }] : [],
+    ),
+    uncategorisedCount: uncategorisedByPeriod.reduce((sum, n) => sum + n, 0),
+    unassignedAccountCount,
+    isFirstRun: rows.length === 0,
+  };
 }
