@@ -1,3 +1,15 @@
+// The budget arithmetic, and the three divide-by-zero cases real data hits.
+//
+// Day 1 of a period has no run rate to project from, the last day has
+// `daysLeft === 0`, and a category can sit at a zero budget. Each one is a
+// NaN or an Infinity on screen if the guard goes missing, and a pace bar
+// showing NaN% is the visible half of the problem — the projection feeding
+// off it is the half that lies quietly.
+//
+// `allowanceCents` flooring at zero is here for the same reason: a carried
+// overspend larger than the budget would otherwise make every downstream
+// percentage meaningless.
+
 import { describe, expect, it } from "vitest";
 import { payPeriodFor, utcDate } from "./period";
 import {

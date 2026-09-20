@@ -1,3 +1,16 @@
+// Transfer detection: what makes a pair provable, and what must stay unproven.
+//
+// The failure these guard against is silent either way. Treat a transfer as
+// income and the books show money never earned; treat real income as a
+// transfer and it vanishes. Both leave the totals balancing.
+//
+// So the cases here are mostly refusals: a leg naming an account that isn't
+// ours, a matching amount without reciprocity, a pair inside one account, the
+// same incoming leg claimed twice. The flatmate collision is the one to read
+// first — a standing order and a genuine flatmate payment, same day, same
+// amount. It must be surfaced as contested, never resolved, because netting
+// the wrong one erases real income.
+
 import { describe, expect, it } from "vitest";
 
 import {

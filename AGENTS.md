@@ -82,7 +82,10 @@ the code-review skill.
 ## House style
 
 - Comments explain why, not what. Every file opens with a header comment saying
-  what it is for.
+  what it is for. A test file needs one only where the reasoning isn't obvious
+  from the tests themselves: what the cases are guarding against, or which
+  failure the file exists to prevent. "Unit tests for `normalise.ts`" above a
+  file called `normalise.test.ts` is not that.
 - Server components throughout, mutations as Server Actions on plain `<form>`s.
   Screens must work with JavaScript disabled.
 - Errors are returned, not thrown. The form re-renders with the message, and
