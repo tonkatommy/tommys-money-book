@@ -370,6 +370,57 @@ export async function suggestFixedBills(
   return new Map(suggestions.map((s) => [s.categoryId, s]));
 }
 
+/**
+ * One category's history over the same window as `/budget/history`.
+ *
+ * Goes through `latestRows`, `allowanceFor` and `spentByCategory` — the same
+ * functions the history screen and the overview use — so the drilldown cannot
+ * quote a different budget or a different spend for a period than the screen
+ * that linked to it.
+ */
+export async function getCategoryHistory(
+  book: Book,
+  categoryId: string,
+  current: PayPeriod,
+  settings: BudgetSettingsView,
+): Promise<{
+  cells: PeriodCell[];
+  summary: CategorySummary;
+  currentStandingCents: number | null;
+  hint: BudgetHint | null;
+}> {
+  const window = previousPeriods(current, HISTORY_PERIODS, settings.anchorDay).reverse();
+
+  const [rows, spentByPeriod] = await Promise.all([
+    prisma.categoryBudget.findMany({
+      where: { categoryId, periodStart: { lte: current.start } },
+    }),
+    Promise.all(window.map((p) => spentByCategory(book, p.start, p.end))),
+  ]);
+
+  const cells = window.map((p, i) => ({
+    period: p,
+    allowance: allowanceFor(latestRows(rows, p).get(categoryId), p),
+    spentCents: spentByPeriod[i].get(categoryId) ?? 0,
+  }));
+
+  const currentRow = latestRows(rows, current).get(categoryId);
+  const currentStandingCents = allowanceFor(currentRow, current)?.standingCents ?? null;
+
+  return {
+    cells,
+    summary: summariseCategory(cells),
+    currentStandingCents,
+    hint: budgetHint({
+      categoryId,
+      cells,
+      currentStandingCents,
+      isFixed: currentRow?.isFixed ?? false,
+      estimated: currentRow?.estimated ?? false,
+    }),
+  };
+}
+
 export type CategoryDetailView = {
   category: Category;
   line: CategoryBudgetView;
@@ -383,6 +434,8 @@ export type CategoryDetailView = {
   }[];
   /** Daily spend across the period, for the bar chart. */
   series: { label: string; cents: number; future: boolean }[];
+  /** The same six-period window `/budget/history` shows, for this category. */
+  history: Awaited<ReturnType<typeof getCategoryHistory>>;
 };
 
 /** One category's drilldown. Null when the id doesn't exist. */
@@ -394,7 +447,7 @@ export async function getCategoryDetail(
   const category = await prisma.category.findUnique({ where: { id: categoryId } });
   if (!category) return null;
 
-  const [{ views }, transactions] = await Promise.all([
+  const [{ views }, transactions, history] = await Promise.all([
     categoryViews(category.book, period, settings),
     prisma.transaction.findMany({
       where: { categoryId, date: { gte: period.start, lte: period.end } },
@@ -407,6 +460,7 @@ export async function getCategoryDetail(
         amountCents: true,
       },
     }),
+    getCategoryHistory(category.book, categoryId, period, settings),
   ]);
 
   const line = views.find((v) => v.categoryId === categoryId);
@@ -426,6 +480,7 @@ export async function getCategoryDetail(
     line,
     period,
     transactions,
+    history,
     series: daysOf(period).map((day, index) => ({
       label: `${day.getUTCDate()}`,
       cents: byDay.get(day.getTime()) ?? 0,

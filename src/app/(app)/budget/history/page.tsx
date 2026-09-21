@@ -6,13 +6,19 @@
 // running one deliberately left out — on day 5 every category looks under
 // budget, which is arithmetic, not information. Phase 4b spec §2.
 //
-// Tables, and only tables, in this first cut. The trend chart lands in a
-// later PR as a client-side enhancement over the table below it (4b spec §6),
-// so this page is built to be complete without it: every figure is here, and
-// the screen works with JavaScript disabled.
+// The trend chart is an enhancement over the table under it, never a source
+// of figures (4b spec §6). Recharts draws nothing without JavaScript — it was
+// measured, see the chart component's header — so the table carries every
+// number and the page is complete without the chart ever appearing.
+//
+// That is also why the chart is handed `unbudgetedSpentCents` alongside the
+// budgeted spend: the two have to say the same thing. A column drawn from
+// budgeted spending alone shows an empty bar over a period with no budgets,
+// reading as "nothing was spent" next to a table row saying $8,555.58.
 
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
+import { BudgetTrendChart } from "@/components/charts/budget-trend-chart";
 import { Alert, ButtonLink, Card, CategoryTag } from "@/components/ui/primitives";
 import { ScreenHead } from "@/components/ui/data";
 import { withBook } from "@/components/ui/nav";
@@ -149,6 +155,17 @@ export default async function BudgetHistoryPage({
             measure against a budget.
           </p>
         )}
+
+        {/* Draws the same array the table below renders. It appears only once
+            JavaScript has run, and adds no figure the table lacks. */}
+        <BudgetTrendChart
+          points={view.periods.map((p) => ({
+            label: p.period.label,
+            allowanceCents: p.allowanceCents,
+            spentCents: p.spentCents,
+            unbudgetedSpentCents: p.unbudgetedSpentCents,
+          }))}
+        />
 
         {/* Genuinely tabular, so it stays a table and scrolls sideways on a
             phone, like the monthly report. The date range sits under each

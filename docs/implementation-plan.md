@@ -162,14 +162,17 @@ minimum.
   properly in real teams.
 - **Docker Compose** — three services (app, db, sync worker) plus a backup job.
   Matches your homelab experience.
-- **Charts:** none. Recharts was the original choice and was reconsidered in
-  Phase 3c (24/08/2026) when the first charting need actually arrived. Declined:
-  every screen in this app is a server component that works with JavaScript
-  disabled, and Recharts is a client component, so it would have been the first
-  client JS in the app in exchange for a bar chart on a screen whose whole value
-  is the numbers. Breakdowns render as ranked bar tables built from the existing
-  design-system primitives. Revisit only if a genuinely chart-shaped question
-  appears, not for the next breakdown.
+- **Charts:** Recharts, for the budget trend and nothing else. Declined in
+  Phase 3c (24/08/2026) for a ranked breakdown a table answers fully, with the
+  note to revisit "only if a genuinely chart-shaped question appears" — Phase
+  4b (21/09/2026) is that question, since six rows of numbers don't show a
+  drift the way a line does. The 3c reasoning still holds everywhere else, and
+  breakdowns remain ranked bar tables built from the design-system primitives.
+  What changed is that the cost was measured rather than assumed: Recharts 3
+  server-renders an empty `<div>` — no `<svg>`, no bars — so it is wired as an
+  enhancement over a server-rendered table that carries every figure, drawn
+  only once JavaScript has run. It adds one chunk, ~105 KB gzipped, on the two
+  routes that use it.
 - **Auth:** a single shared password/session is enough for LAN-only single-user
   (see §7). Don't build a user system you don't need.
 
@@ -449,7 +452,23 @@ None of the arithmetic assumes an answer to any of the three. The figures
 also haven't yet been reconciled against a real Ray White/ASB statement or
 run past Garreth — do that before trusting this for an actual filed return.
 
-4b (budget vs actual) and 4c (savings goals) are not yet designed.
+**4b (budget history) implemented 21/09/2026.** `/budget/history` shows the
+six complete pay periods before the running one — excluded deliberately,
+since a part-finished period always looks under budget — with whole-budget
+totals, per-category consistency ("over in 5 of 6"), and adjustment hints for
+categories consistently over or under by at least 10% and $20 across three
+budgeted periods. Hints suggest; they never write.
+
+The rule that decides every figure on it, "which budget row applies to this
+period and does its carryover count", moved into `src/lib/budget/history.ts`
+and the two existing inline copies (the overview and the month-end review)
+now call it. A period with no row stays absent from the counts and averages
+rather than becoming a zero budget everything is over — invariant 7, and the
+common case while budgets only reach back to August 2026.
+
+Spec: `docs/superpowers/specs/2026-09-19-phase-4b-budget-history-design.md`.
+
+4c (savings goals) is not yet designed.
 
 Rough total: sync foundation in ~3 weekends, categorised data by ~5, MVP live
 around ~8–9 weekends of part-time work. As a junior dev budget generously — the
@@ -537,6 +556,23 @@ entered above what was actually paid that year) is capped at the plausible
 maximum and warned about, not silently accepted or hard-rejected — the same
 "never silently wrong" principle the sync and matcher already apply, now
 extended to a number a human typed in.
+
+**Phase 4b decisions (19-21/09/2026):** budget vs actual scoped as history,
+because Phase 3b already built the current-period comparison and the
+unanswered question was whether the budget is realistic across periods · the
+running period is excluded from the window rather than shown partial, since
+a part-finished period always looks under budget · the chart decision from 3c
+was reopened under its own "revisit if a chart-shaped question appears"
+clause, and Recharts was tested before being adopted: it server-renders an
+empty div, so it is an enhancement over a table that carries every figure,
+at ~105 KB gzipped on two routes · hints compare against the budget as it
+stands now rather than as it stood in the window, so a budget already raised
+stops being suggested · the chart is handed budgeted and unbudgeted spending
+separately after a first cut drew a period with no budgets as an empty column
+— "nothing was spent" beside a table row reading $8,555.58, the
+characteristic failure in miniature · AGENTS.md's file-header rule was
+amended in the same week (PR #28) after the 15-of-23 test files without one
+showed the rule, not the files, was wrong.
 
 **Open questions for you:** whether Vehicle_Logbook.xlsx eventually joins the
 app; the AIA treatment, the entertainment 50% limit, and the Cashel St
