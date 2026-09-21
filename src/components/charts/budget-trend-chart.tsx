@@ -36,7 +36,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { centsToDollars, formatNZD, formatNZDWhole } from "@/lib/money";
+import { formatNZD, formatNZDWhole } from "@/lib/money";
 
 /** One period, already flipped to positive cents by the query layer. */
 export type TrendPoint = {
@@ -118,14 +118,15 @@ export function BudgetTrendChart({ points }: { points: TrendPoint[] }) {
 
   const tokens = readTokens();
 
-  // Recharts works in numbers it will format; cents would render as an axis
-  // of six-figure integers. Dollars here are for DRAWING only — every figure
-  // the reader sees comes back through `formatNZD` from the original cents.
+  // Plotted in CENTS, the integers the rest of the app works in. Converting
+  // to dollars to draw and multiplying back by 100 to label was float money
+  // arithmetic (invariant 2) for no gain: the axis renders whatever the
+  // formatter returns, so the tick's magnitude never reaches the reader.
   const data = points.map((p) => ({
     label: p.label,
-    spent: centsToDollars(p.spentCents),
-    unbudgeted: centsToDollars(p.unbudgetedSpentCents ?? 0),
-    allowance: p.allowanceCents === null ? null : centsToDollars(p.allowanceCents),
+    spent: p.spentCents,
+    unbudgeted: p.unbudgetedSpentCents ?? 0,
+    allowance: p.allowanceCents,
   }));
 
   const anyUnbudgeted = points.some((p) => (p.unbudgetedSpentCents ?? 0) !== 0);
@@ -146,7 +147,7 @@ export function BudgetTrendChart({ points }: { points: TrendPoint[] }) {
             axisLine={false}
             tickLine={false}
             width={64}
-            tickFormatter={(value: number) => formatNZDWhole(Math.round(value * 100))}
+            tickFormatter={(cents: number) => formatNZDWhole(cents)}
           />
           <Tooltip
             contentStyle={{
@@ -157,11 +158,11 @@ export function BudgetTrendChart({ points }: { points: TrendPoint[] }) {
             }}
             labelStyle={{ color: tokens.text }}
             formatter={(value, name) => [
-              // Back through the cents, so the tooltip cannot disagree with
-              // the table by a rounding step. A period with no budget arrives
+              // The same integer cents the table formats, so the two cannot
+              // disagree by a rounding step. A period with no budget arrives
               // here as null — and as undefined once Recharts has been
               // through it — so both say so rather than rendering "$0.00".
-              typeof value === "number" ? formatNZD(Math.round(value * 100)) : "no budget",
+              typeof value === "number" ? formatNZD(value) : "no budget",
               name === "spent" ? "Spent" : name === "unbudgeted" ? "Not budgeted" : "Budget",
             ]}
           />

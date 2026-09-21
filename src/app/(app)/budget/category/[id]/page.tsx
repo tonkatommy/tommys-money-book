@@ -224,11 +224,16 @@ export default async function CategoryPage({
             </span>
           }
         >
+          {/* Split the same way the whole-budget chart splits it: spending in
+              a period this category had no budget for is NOT budgeted spend,
+              and drawing it in the budgeted tone would show an orange bar
+              beside a table row reading "no budget". */}
           <BudgetTrendChart
             points={history.cells.map((cell) => ({
               label: cell.period.label,
               allowanceCents: cell.allowance?.allowanceCents ?? null,
-              spentCents: cell.spentCents,
+              spentCents: cell.allowance ? cell.spentCents : 0,
+              unbudgetedSpentCents: cell.allowance ? 0 : cell.spentCents,
             }))}
           />
 
