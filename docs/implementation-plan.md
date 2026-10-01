@@ -468,7 +468,10 @@ common case while budgets only reach back to August 2026.
 
 Spec: `docs/superpowers/specs/2026-09-19-phase-4b-budget-history-design.md`.
 
-4c (savings goals) is not yet designed.
+**4c (savings goals) designed 01/10/2026, not yet implemented.** A goal
+measures one PERSONAL savings account's Akahu balance against a target,
+with at most one active goal per account so no balance is counted twice.
+Spec: `docs/superpowers/specs/2026-10-01-phase-4c-savings-goals-design.md`.
 
 Rough total: sync foundation in ~3 weekends, categorised data by ~5, MVP live
 around ~8–9 weekends of part-time work. As a junior dev budget generously — the

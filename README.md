@@ -118,7 +118,10 @@ Full architecture, data model, and phase detail: [docs/implementation-plan.md](d
 - [x] **Phase 4b — Budget history:** `/budget/history` — six complete pay
       periods of budget vs actual, per-category consistency, and adjustment
       hints, with a trend chart layered over the table
-- [ ] **Phase 4c — Savings goals:** not yet designed
+- [ ] **Phase 4c — Savings goals:** designed, not yet implemented. A goal
+      tracks one personal savings account's balance against a target, with
+      the contribution needed per pay period. Spec:
+      `docs/superpowers/specs/2026-10-01-phase-4c-savings-goals-design.md`
 
 ## Getting started
 
@@ -354,6 +357,6 @@ treatment, the entertainment 50% limit, and the mortgage interest figure
 itself are still open questions for Garreth; the report states them as
 caveats rather than picking an answer.
 
-Next up is 4b (budget vs actual) and 4c (savings goals) — not yet designed.
+Next up is 4c (savings goals), designed and ready to implement.
 
 Built in the open as a learning and portfolio project.
