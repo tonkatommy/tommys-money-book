@@ -110,17 +110,21 @@ money that exists, with every individual figure still matching the bank.
 That is this app's characteristic failure exactly, so it is a rule:
 
 - **At most one active (non-archived) goal per account.**
-- Enforced in the write path, inside the same transaction as the insert or
-  update, not by hiding the account from a dropdown (invariant 6: the
-  dropdown is not the guard).
-- Not a database `@unique` on `accountId`, because that would also block
+- **The database enforces it**, with a partial unique index on `accountId`
+  where `archivedAt` is null (§5). A plain `@unique` would also block
   starting a new goal on an account whose old goal is archived, which is
-  the normal life cycle of a bucket. A partial unique index (`WHERE
-  "archivedAt" IS NULL`) would be the database-level version. Whether
-  Prisma 7.8 can express one in the schema, or whether it has to be
-  hand-written into the migration SQL, is to be checked during
-  implementation. If it can be done cleanly, do both, with the code check
-  kept for the friendly error message.
+  the normal life cycle of a bucket.
+- **The write path checks too**, but only to produce a friendly form error.
+  The check alone isn't a guard. Under Postgres's default `READ COMMITTED`
+  isolation, two concurrent creates or unarchives can both read "no active
+  goal" and both commit, even inside `$transaction`. Single user makes that
+  unlikely (a double-clicked submit is the realistic case), but it is
+  exactly the kind of quietly-wrong state this app exists to make
+  impossible rather than improbable. The loser of that race gets Prisma's
+  `P2002` unique-violation error, which the write path catches and returns
+  as the same form error the check gives.
+- Neither is the dropdown. Hiding an account from the select is a hint
+  (invariant 6).
 
 Earmarks, several goals splitting one account, can come later as their own
 phase, if it turns out to be wanted. They need allocation rows that sum to
@@ -187,10 +191,23 @@ other screen (invariant 5).
   means the average is exactly the mean of the rows in the detail page's
   history table (§6), so the projection can be checked by eye against the
   figures printed directly under it.
-- **Periods before the account's `historyStartDate` don't count.** An
-  account opened two months ago has two periods of history, not six
-  periods where four are zero. If there are none, the average is `null`, not
-  zero, and not `NaN`.
+- **Rounded to whole cents with `Math.round`,** the same rounding as
+  `averageSpentCents` in `budget/history.ts`. A mean of integer cents is
+  fractional whenever the sum doesn't divide by the period count (10,001
+  cents over six periods is 1,666.83...), and an unrounded mean would carry
+  float money into the on-track comparison and the projection. Rounded in
+  `averageContributionCents` itself, so no caller ever sees the fraction.
+- **Only periods that start on or after the account's `historyStartDate`
+  count.** The period containing `historyStartDate` is incomplete: whatever
+  moved between that period's start and the first imported transaction
+  isn't in the data, so it would read as a smaller contribution than was
+  made. An account opened two months ago has one or two periods of history,
+  not six periods where four are zero. The trade-off is that a genuinely
+  new bucket loses its first, partial period from the average. The app
+  can't tell "opened mid-period" from "Akahu's history starts mid-period",
+  and dropping a real period understates the history, where keeping a
+  truncated one misstates it. If no period qualifies, the average is
+  `null`, not zero, and not `NaN`.
 - The running period is excluded, for the reason 4b gives (spec §2): on
   day 5 the payday standing order may or may not have landed, and a
   partial period reads as a missed contribution.
@@ -231,9 +248,25 @@ model SavingsGoal {
 
   account Account @relation(fields: [accountId], references: [id])
 
-  @@index([accountId])
+  // One active goal per account (§3). Partial, so an archived goal doesn't
+  // block a new one on the same bucket.
+  @@unique([accountId], where: { archivedAt: null })
 }
 ```
+
+The `where` clause needs `previewFeatures = ["partialIndexes"]` on the
+generator. It has been in Prisma since 7.4, covers PostgreSQL with
+migration and introspection support, and its error strings are present in
+the pinned 7.8.0 schema engine. It is a preview feature on a pinned stack,
+so the alternative was weighed: hand-writing `CREATE UNIQUE INDEX ... WHERE
+"archivedAt" IS NULL` into the migration SQL works, but the schema doesn't
+know the index exists, so the next `prisma migrate dev` sees drift and
+generates a migration to drop it. A guard that the next unrelated migration
+quietly removes is worse than a preview flag. If the flag misbehaves during
+implementation, stop and raise it rather than falling back silently.
+
+The unique index also serves lookups by `accountId`, so no separate
+`@@index` is needed.
 
 `Account` gains the back-relation `savingsGoals SavingsGoal[]`. No
 `onDelete: Cascade`: accounts are never deleted in this app, and if one ever
@@ -254,7 +287,12 @@ The same split as budgets and the IR3 form: parsing and validation in the
 plain module so it is unit-testable without a request context, and the
 `"use server"` actions as thin wrappers.
 
-- `parseGoalForm(formData, today)` returns the parsed goal or field errors:
+- `parseGoalForm(formData, today, mode)` returns the parsed goal or field
+  errors. `mode` is `"create"` or `"edit"`, and it is **passed by the
+  action, never read from the form.** Create and edit are separate actions,
+  each of which knows which it is. A hidden `mode` field would let a direct
+  POST claim to be an edit and slip a past date past the create-only rule.
+  The fields:
   - `name`: trimmed, non-empty, 80 characters at most.
   - `targetCents`: through `parseDollarsToCents`, and must be `> 0`.
   - `targetDate`: optional. When present, through `parseDateParam`
@@ -264,14 +302,26 @@ plain module so it is unit-testable without a request context, and the
     kept and re-dated rather than refused.
   - `note`: optional, trimmed.
 - `createGoal`, `updateGoal`, `setGoalArchived`, each in one
-  `prisma.$transaction` that:
+  `prisma.$transaction`. When a write **makes a goal active on an account**,
+  which means creating, editing (whether or not the account changed), or
+  unarchiving, the transaction:
   - **re-reads the account and re-checks it**: exists, `book ===
     "PERSONAL"` (not null, which means unmapped, and not BUSINESS), and has
     an `akahuId`. The account id from the form is a value naming a record,
     and the record decides its own book (code-review skill §1), never the
     form;
-  - checks no **other** active goal uses the account (§3). Unarchiving runs
-    the same check, because it can create the clash just as creating can.
+  - checks no **other** active goal uses the account (§3), and catches
+    `P2002` from the partial unique index as the same error.
+- **Archiving skips both checks.** It takes a goal *out* of tracking, so it
+  can't create a clash or a book leak. It also has to work on exactly the
+  goals that fail the account check: §6 keeps a goal visible, with a
+  warning, when its account moves to BUSINESS, and archiving is how Tommy
+  clears it. Refusing that would leave a goal that can neither be tracked
+  nor put away. Archiving still checks the session and that the goal
+  exists.
+- Editing re-checks the account even when it didn't change. A goal whose
+  account has since moved books can't be edited back into being tracked;
+  it can only be archived.
 - Every action re-checks `hasSession()` first (invariant 6).
 - Errors are returned, not thrown, in the `MutationResult` shape, and the
   submitted values come back from the action so a rejected save doesn't
@@ -308,10 +358,20 @@ own data-quality line, worded for that goal, rather than sending Tommy to
 | Condition | Message gist | Source |
 |---|---|---|
 | Account `status === "INACTIVE"` | Bank connection needs re-consent; balance frozen | `Account.status` |
-| `balanceAsAt` older than `STALE_AFTER_HOURS` | Balance last updated DD/MM/YYYY | `hoursSince` in `sync/stale.ts` |
+| `balanceAsAt` older than `STALE_AFTER_HOURS` | Balance last updated DD/MM/YYYY | `isSyncStale` in `sync/stale.ts` |
+| `balanceAsAt === null`, balance present | Balance date unknown; can't tell how current it is | `isSyncStale` |
 | Persistent drift | Contributions below may be missing transactions | `isDriftPersistent` |
 | Account `book !== "PERSONAL"` | Account has moved books; goal not tracked | `Account.book` |
 | `balanceCents === null` | No balance from the bank yet | `Account.balanceCents` |
+
+The null-date row is there because `normaliseAccount`
+(`src/lib/akahu/normalise.ts`) sets `balanceCents` and `balanceAsAt`
+independently, from `balance.current` and `refreshed.balance`, so a balance
+can arrive with no date. `isSyncStale` already treats `null` as stale (the
+first-boot case it was written for), so the goal calls it with
+`balanceAsAt` directly, rather than `hoursSince`, which would need a
+non-null date. One definition of stale, and an undated balance is never
+presented as current.
 
 The last two **still show the goal**, with the warning in place of the
 figures, rather than dropping it from the list. A goal that silently
@@ -368,13 +428,13 @@ thinks about this period's money.
 
 | # | Invariant | Here |
 |---|---|---|
-| 1 | Book safety | Goal account re-checked as PERSONAL on every write. A goal whose account later moves books shows a warning, and is not silently dropped or counted. |
-| 2 | Integer cents | Target via `parseDollarsToCents`. All arithmetic in cents. `ceil` on an integer division, never `* 100`. No expense flip (§2). |
+| 1 | Book safety | Goal account re-checked as PERSONAL on every write that makes a goal active (archiving excepted, §5). A goal whose account later moves books shows a warning, and is not silently dropped or counted. |
+| 2 | Integer cents | Target via `parseDollarsToCents`. All arithmetic in cents: `ceil` for the required contribution, `Math.round` for the average, never `* 100`. No expense flip (§2). |
 | 3 | MANUAL | Not touched. Goals never write `categoryId`. |
 | 4 | Transfers | Not touched. Net flow is category- and pair-blind (§2). |
 | 5 | Dates | `targetDate` is `@db.Date`, parsed by `parseDateParam`, compared against `nzToday`. |
-| 6 | Server Actions | `hasSession()` on every action. Account book and the one-goal rule re-derived from the database. |
-| 7 | Missing rows ≠ zero | Periods before `historyStartDate` don't count toward the average. No history means a `null` average, never zero. |
+| 6 | Server Actions | `hasSession()` on every action. Account book and the one-goal rule re-derived from the database, the latter enforced by a partial unique index. Create/edit `mode` comes from the action, not the form. |
+| 7 | Missing rows ≠ zero | Only periods starting on or after `historyStartDate` count toward the average, so a truncated first period doesn't either. No history means a `null` average, never zero. |
 | 8 | Divide-by-zero | `periodsLeft === 0`, average `<= 0`, no history, non-positive target. All tested. |
 
 ---
@@ -390,21 +450,32 @@ Vitest, no database, as every spec since 3a §7.
   - `requiredPerPeriodCents`: rounds **up** (`$100.00` over 3 periods is
     `3334`, not `3333`); exact division unchanged; `periodsLeft === 0` is
     `null`; reached is `0` or `null`, not negative.
-  - `averageContributionCents`: six periods; fewer because of
-    `historyStartDate`; none is `null`; a withdrawal period pulls the
-    average down rather than being ignored.
+  - `averageContributionCents`: six periods; a sum that doesn't divide
+    (10,001 over six) comes back as a whole number of cents; the period
+    containing `historyStartDate` is excluded when it starts before it, and
+    included when `historyStartDate` is exactly its start; none qualifying
+    is `null`; a withdrawal period pulls the average down rather than being
+    ignored.
   - `projection`: a positive average gives a payday date; a zero or
     negative average is `null`; reached is `null`.
   - `progress`: negative balance clamps the bar and keeps the figure; over
     100%; non-positive target returns `null`.
 - `mutate.test.ts` (goals): `parseGoalForm` with a blank name, a zero or
   negative target, `2027-02-31`, a past date on create (refused) and on
-  edit (allowed), and values echoed back on failure.
+  edit (allowed), the same past date refused when `mode` is `"create"`
+  even if the form carries a field claiming otherwise, and values echoed
+  back on failure.
+- A goal-warning helper, if the warning rules are pulled into a pure
+  function as `sync/status.ts` does for the status page: a null
+  `balanceAsAt` with a balance present warns as stale.
 
 The account checks and the one-active-goal rule touch Prisma, and are
 verified by hand against the dev server: a BUSINESS account id posted
 directly, an unmapped account, a cash account, a second goal on a busy
 account, and unarchiving into a clash. Each must come back as a form error.
+The index itself is checked by inserting a second active goal on the same
+account in `psql` (refused) and a second archived one (allowed). An active
+goal on an account remapped to BUSINESS must still archive.
 Screens are checked at phone and desktop widths with JavaScript disabled.
 
 ---
@@ -416,7 +487,9 @@ because one PR refactored a function every `/budget` figure depends on.
 Nothing here changes an existing figure. It is a new table, a new pure
 module and new routes, so a single PR is reviewable as a unit:
 
-1. Schema and migration.
+1. Schema and migration, with the `partialIndexes` preview flag. Read the
+   generated SQL to confirm it carries `WHERE "archivedAt" IS NULL` before
+   going further.
 2. `src/lib/goals/pace.ts` and its tests.
 3. `mutate.ts`, the actions, and `/goals/new`.
 4. `query.ts`, `/goals` and `/goals/[id]`.
