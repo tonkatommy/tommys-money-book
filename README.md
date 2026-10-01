@@ -39,7 +39,7 @@ stack I work in.
 | ORM | Prisma — schema-as-code, typed client, migrations |
 | Bank feeds | Akahu personal app (read-only, free tier, daily refresh) |
 | Sync | Scheduled worker (node-cron) polling Akahu, deduping on transaction ID |
-| Charts | None — breakdowns are server-rendered bar tables (reasoning in the plan) |
+| Charts | Recharts for the budget trend only; breakdowns stay server-rendered bar tables (reasoning in the plan) |
 | Deployment | Docker Compose on a homelab, nightly `pg_dump` backups |
 
 ## Architecture
@@ -115,7 +115,10 @@ Full architecture, data model, and phase detail: [docs/implementation-plan.md](d
       summaries by tax tag, the 12.57% home office deduction, and an `.xlsx`
       export, plus a form for the two figures the bank feed can't see (the
       management fee and the mortgage interest)
-- [ ] **Phase 4b/4c — Budget vs actual, savings goals:** not yet designed
+- [x] **Phase 4b — Budget history:** `/budget/history` — six complete pay
+      periods of budget vs actual, per-category consistency, and adjustment
+      hints, with a trend chart layered over the table
+- [ ] **Phase 4c — Savings goals:** not yet designed
 
 ## Getting started
 

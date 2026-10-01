@@ -7,6 +7,7 @@
 
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { BudgetTrendChart } from "@/components/charts/budget-trend-chart";
 import {
   Badge,
   ButtonLink,
@@ -14,6 +15,7 @@ import {
   EmptyState,
 } from "@/components/ui/primitives";
 import { DayBars, Figure, PaceBar, ScreenHead, Verdict } from "@/components/ui/data";
+import Link from "next/link";
 import { withBook } from "@/components/ui/nav";
 import { formatNZD, formatNZDWhole } from "@/lib/money";
 import { nzDate, shortDate } from "@/lib/budget/period";
@@ -35,7 +37,7 @@ export default async function CategoryPage({
   const detail = await getCategoryDetail(id, period, settings);
   if (!detail) notFound();
 
-  const { category, line, transactions, series } = detail;
+  const { category, line, transactions, series, history } = detail;
 
   // The category's own book, never `?book=`. A category id already determines
   // its book, so a querystring that disagrees is either a stale link or a
@@ -203,6 +205,133 @@ export default async function CategoryPage({
               {formatNZDWhole(line.standingCents)}.
             </p>
           )}
+        </Card>
+
+        {/* The same window `/budget/history` shows, for this category alone.
+            The figures come from the same functions that screen uses, so the
+            two cannot quote a different budget for the same period. */}
+        <Card
+          title="How past periods went"
+          action={
+            <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+              {history.summary.budgetedCount === 0
+                ? "not budgeted in this window"
+                : history.summary.overCount === 0
+                  ? `never over, in ${history.summary.budgetedCount} budgeted period${
+                      history.summary.budgetedCount === 1 ? "" : "s"
+                    }`
+                  : `over in ${history.summary.overCount} of ${history.summary.budgetedCount}`}
+            </span>
+          }
+        >
+          {/* Split the same way the whole-budget chart splits it: spending in
+              a period this category had no budget for is NOT budgeted spend,
+              and drawing it in the budgeted tone would show an orange bar
+              beside a table row reading "no budget". */}
+          <BudgetTrendChart
+            points={history.cells.map((cell) => ({
+              label: cell.period.label,
+              allowanceCents: cell.allowance?.allowanceCents ?? null,
+              spentCents: cell.allowance ? cell.spentCents : 0,
+              unbudgetedSpentCents: cell.allowance ? 0 : cell.spentCents,
+            }))}
+          />
+
+          <div className="mb-scroll-x">
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontFamily: "var(--font-sans)",
+                fontSize: "var(--text-sm)",
+              }}
+            >
+              <thead>
+                <tr
+                  style={{
+                    textAlign: "left",
+                    fontSize: "var(--text-xs)",
+                    letterSpacing: "var(--tracking-wide)",
+                    textTransform: "uppercase",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  <th style={{ padding: "10px 14px 10px 0" }}>Period</th>
+                  <th style={{ padding: "10px 14px 10px 0", textAlign: "right" }}>Budget</th>
+                  <th style={{ padding: "10px 14px 10px 0", textAlign: "right" }}>Spent</th>
+                  <th style={{ padding: "10px 14px 10px 0", textAlign: "right" }}>Over / under</th>
+                </tr>
+              </thead>
+              <tbody style={{ color: "var(--text-secondary)" }}>
+                {history.cells.map((cell) => {
+                  const variance =
+                    cell.allowance === null
+                      ? null
+                      : cell.allowance.allowanceCents - cell.spentCents;
+
+                  return (
+                    <tr
+                      key={cell.period.label}
+                      style={{ borderTop: "1px solid var(--border-subtle)" }}
+                    >
+                      <td style={{ padding: "10px 14px 10px 0", whiteSpace: "nowrap" }}>
+                        {cell.period.label}
+                      </td>
+                      <td
+                        className="mb-num"
+                        style={{ padding: "10px 14px 10px 0", textAlign: "right" }}
+                      >
+                        {cell.allowance === null ? (
+                          <span style={{ color: "var(--text-muted)" }}>no budget</span>
+                        ) : (
+                          formatNZDWhole(cell.allowance.allowanceCents)
+                        )}
+                      </td>
+                      <td
+                        className="mb-num"
+                        style={{ padding: "10px 14px 10px 0", textAlign: "right" }}
+                      >
+                        {formatNZD(cell.spentCents)}
+                      </td>
+                      <td
+                        className="mb-num"
+                        style={{
+                          padding: "10px 14px 10px 0",
+                          textAlign: "right",
+                          color:
+                            variance === null
+                              ? "var(--text-muted)"
+                              : variance < 0
+                                ? "var(--status-error)"
+                                : "var(--status-ok)",
+                        }}
+                      >
+                        {variance === null
+                          ? "—"
+                          : variance === 0
+                            ? "on budget"
+                            : `${formatNZD(Math.abs(variance))} ${variance < 0 ? "over" : "under"}`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p
+            style={{
+              margin: "var(--space-4) 0 0",
+              fontSize: "var(--text-xs)",
+              color: "var(--text-muted)",
+            }}
+          >
+            The running period is not here — it is the rest of this screen.{" "}
+            <Link href={withBook("/budget/history", category.book)}>
+              Every category&rsquo;s history
+            </Link>
+            .
+          </p>
         </Card>
 
         <div className="mb-grid mb-grid-split">

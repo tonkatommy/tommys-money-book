@@ -44,8 +44,11 @@ every judgement toward that.
 ## Stack, as pinned
 
 Next.js 16.2.10 (App Router), React 19.2.4, Prisma 7.8 with `@prisma/adapter-pg`,
-PostgreSQL, Tailwind 4, Vitest 4, `tsx` for scripts, node-cron worker. Nothing
-charts yet: Recharts is named in the plan but is not installed.
+PostgreSQL, Tailwind 4, Vitest 4, `tsx` for scripts, node-cron worker. Recharts
+3.10 draws exactly one thing, the budget trend on `/budget/history` and the
+category drilldown. It renders nothing without JavaScript, so it is always an
+enhancement over a server-rendered table that carries every figure — never a
+source of numbers. Everything else stays a server-rendered bar table.
 
 Per the Next.js block above, read `node_modules/next/dist/docs/` before writing
 Next code. Note that the middleware convention in this version is
