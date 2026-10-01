@@ -215,9 +215,16 @@ other screen (invariant 5).
 ### Projection
 
 - **On track** when `averageContributionCents >= requiredPerPeriodCents`.
-- **Projected reach date**: `ceil(remaining / average)` periods from the
-  current one, reported as that period's payday (`nextPayday` of the period
-  before it). Shown with or without a target date.
+- **Projected reach date**: `ceil(remaining / average)` periods, counting
+  the current one as the first (consistent with `periodsLeft`), reported as
+  the **last day** of the period the target is reached in. Shown with or
+  without a target date. *Amended during implementation, 02/10/2026:* this
+  originally said the period's payday, which assumes the period's money
+  lands on day one. True for a standing order, not for a top-up, so the end
+  date is the claim that holds either way.
+- **Horizon:** more than 600 periods (50 years) away is reported as such
+  rather than as a date. It also bounds the walk when a few cents of
+  interest is the only thing going in, which is exactly BNZ Rapid Save.
 - **Average `<= 0`** (withdrawals outpacing deposits, or nothing going in):
   no projected date. The goal says "not growing at the current rate", which
   is the true statement. Dividing by a negative average gives a date in the
@@ -322,6 +329,10 @@ plain module so it is unit-testable without a request context, and the
 - Editing re-checks the account even when it didn't change. A goal whose
   account has since moved books can't be edited back into being tracked;
   it can only be archived.
+- *Added during implementation, 02/10/2026:* **an archived goal can't be
+  edited** until it is unarchived. Unarchiving is where its account is
+  re-checked; editing it while archived would have to either skip that
+  check or clash with whichever goal has since taken over the bucket.
 - Every action re-checks `hasSession()` first (invariant 6).
 - Errors are returned, not thrown, in the `MutationResult` shape, and the
   submitted values come back from the action so a rejected save doesn't

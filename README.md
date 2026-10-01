@@ -118,10 +118,10 @@ Full architecture, data model, and phase detail: [docs/implementation-plan.md](d
 - [x] **Phase 4b — Budget history:** `/budget/history` — six complete pay
       periods of budget vs actual, per-category consistency, and adjustment
       hints, with a trend chart layered over the table
-- [ ] **Phase 4c — Savings goals:** designed, not yet implemented. A goal
-      tracks one personal savings account's balance against a target, with
-      the contribution needed per pay period. Spec:
-      `docs/superpowers/specs/2026-10-01-phase-4c-savings-goals-design.md`
+- [x] **Phase 4c — Savings goals:** `/goals` — each goal tracks one
+      personal savings account's bank balance against a target, with the
+      contribution needed per pay period, the six-period average actually
+      put in, and a projected date
 
 ## Getting started
 
@@ -357,6 +357,15 @@ treatment, the entertainment 50% limit, and the mortgage interest figure
 itself are still open questions for Garreth; the report states them as
 caveats rather than picking an answer.
 
-Next up is 4c (savings goals), designed and ready to implement.
+**Phase 4c landed 02/10/2026**: `/goals`, savings goals. A goal is
+measured by its account's Akahu balance, and nothing about progress is
+stored, so a goal is reconciled against the bank every day and can't drift
+from it. At most one active goal per account, enforced by a partial unique
+index (Prisma's `partialIndexes` preview), because two goals on one bucket
+would each count the whole balance while every figure still matched the
+bank. It's display only: nothing on `/budget` changes. Reached from a link on
+`/budget` rather than a nav item.
+
+That completes Phase 4 as planned.
 
 Built in the open as a learning and portfolio project.

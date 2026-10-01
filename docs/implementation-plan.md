@@ -412,7 +412,7 @@ export, all of which are Phase 4. 3c surfaces figures for Tommy to read; Phase 4
 produces a document for the accountant, which is a different problem with a
 different audience.
 
-### Phase 4 — Reports and year-end (ongoing)
+### Phase 4 — Reports and year-end (complete 02/10/2026)
 
 - IR3 pack: FY summary of rental income and expenses, Tommy Tinkers
   income/expense summary by tax tag, home office calc (12.57% of eligible
@@ -468,9 +468,21 @@ common case while budgets only reach back to August 2026.
 
 Spec: `docs/superpowers/specs/2026-09-19-phase-4b-budget-history-design.md`.
 
-**4c (savings goals) designed 01/10/2026, not yet implemented.** A goal
-measures one PERSONAL savings account's Akahu balance against a target,
-with at most one active goal per account so no balance is counted twice.
+**4c (savings goals) implemented 02/10/2026.** `/goals` measures each goal
+by one PERSONAL account's Akahu balance against a target. Nothing about
+progress is stored, so a goal inherits the daily reconciliation rather than
+needing a check of its own. Per goal: what has to go in each pay period to
+hit the date (rounded up, so paying it actually arrives), the average net
+flow over the last six complete periods, and a projected date. Net flow is
+every transaction on the account, category-blind, so goals never touch
+transfer pairing. A goal whose balance can't be trusted (stale, undated,
+inactive connection, persistent drift, account moved books) says so on its
+own card, and one whose account left the personal book stays listed rather
+than disappearing.
+
+At most one active goal per account, enforced by a partial unique index.
+Display only: no figure on `/budget` changes. Phase 4 is complete.
+
 Spec: `docs/superpowers/specs/2026-10-01-phase-4c-savings-goals-design.md`.
 
 Rough total: sync foundation in ~3 weekends, categorised data by ~5, MVP live
@@ -576,6 +588,23 @@ separately after a first cut drew a period with no budgets as an empty column
 characteristic failure in miniature · AGENTS.md's file-header rule was
 amended in the same week (PR #28) after the 15-of-23 test files without one
 showed the rule, not the files, was wrong.
+
+**Phase 4c decisions (01-02/10/2026):** "savings goal", undefined in this
+plan, was defined as a target for one account's *balance*, not for
+hand-entered earmarks or categorised contributions. The balance is the one
+figure reconciled against the bank daily, and savings moves are `TRANSFER`
+kind, which nets to zero and so is invisible to every existing total · one
+active goal per account as a database rule, after review showed a
+check-then-insert under READ COMMITTED lets two concurrent writes both pass
+· Prisma's `partialIndexes` preview adopted for that index, over hand-written
+migration SQL that the next `migrate dev` would read as drift and drop · no
+`accountType` filter on the account picker, and the real data justified it:
+most ANZ buckets come through from Akahu as `CHECKING`, so a `SAVINGS`
+filter would have hidden them · six periods for the average rather than the
+budget suggestions' three, so it is exactly the mean of the history table
+printed under it · the projected date is the end of the period the target
+is reached in, not its payday, because payday assumes the money lands on
+day one · no nav item, a link from `/budget` instead.
 
 **Open questions for you:** whether Vehicle_Logbook.xlsx eventually joins the
 app; the AIA treatment, the entertainment 50% limit, and the Cashel St
