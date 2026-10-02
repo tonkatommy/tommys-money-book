@@ -180,12 +180,16 @@ minimum.
 
 ## 5. Data model
 
+The core of the model, as planned and as amended by what the real data
+showed. `prisma/schema.prisma` is the source of truth and carries the full
+reasoning per field. This section is the map, not the territory.
+
 ```prisma
 model Account {
   id          String   @id @default(cuid())
   name        String   @unique      // "ANZ Everyday", "BNZ Tommy Tinkers", ...
-  book        Book                  // PERSONAL | BUSINESS
-  akahuId     String?  @unique      // linked in Phase 4
+  book        Book?                 // PERSONAL | BUSINESS | null = not yet mapped
+  akahuId     String?  @unique      // linked at the Phase 1 baseline; null for cash
   transactions Transaction[]
 }
 
@@ -228,6 +232,38 @@ model Transaction {
   transferPairId String?            // links XFR-01 ↔ XFR-02 legs
   account     Account  @relation(...)
   category    Category? @relation(...)
+}
+
+// Added in Phase 3b. One row: the pay-period anchor (20th) and the
+// fortnightly display split.
+model BudgetSettings { ... }
+
+// Added in Phase 3b. A category's allowance from `periodStart` onwards,
+// until a later row replaces it. No roll-forward job.
+model CategoryBudget {
+  categoryId  String
+  periodStart DateTime @db.Date
+  amountCents Int
+  isFixed     Boolean               // a bill: held out of the pace calculation
+  carryoverCents Int                // this period only; never inherited
+}
+
+// Added in Phase 4a. The two IR3 figures the feed cannot see, per FY.
+model TaxYearAdjustment {
+  fyLabel                     String @id   // "FY2027"
+  rentalManagementFeeCents    Int?         // null = not entered, and the
+  rentalMortgageInterestCents Int?         // IR3 screen says so loudly
+}
+
+// Added in Phase 4c. A target for one account's balance. No progress column:
+// progress is the account's own Akahu balance, read live.
+model SavingsGoal {
+  name        String
+  accountId   String
+  targetCents Int
+  targetDate  DateTime? @db.Date
+  archivedAt  DateTime?
+  @@unique([accountId], where: { archivedAt: null })  // one active goal per account
 }
 ```
 
@@ -284,6 +320,17 @@ Design notes worth understanding, not just copying:
   called for: `period.ts` already solves the identical problem that way, the
   bounds are unit-testable without a database, and a raw SQL fragment would have
   been the only one in the codebase.
+- **A budget row continues until replaced** (Phase 3b). A period with no row
+  is not a zero budget: each category resolves to its most recent row on or
+  before the period. A scheduled job that copied budgets forward would fail
+  silently one morning and zero the budget, and a zero budget looks exactly
+  like a disciplined month.
+- **A savings goal stores no progress** (Phase 4c). Its progress is the
+  account's Akahu balance, the one figure reconciled against the bank every
+  day, so a goal can't drift from the bank. The partial unique index is what
+  stops two goals on one bucket each counting the whole balance. Prisma
+  expresses it through the `partialIndexes` preview, because a hand-written
+  index is invisible to the schema and the next `migrate dev` would drop it.
 
 ---
 
@@ -481,7 +528,17 @@ own card, and one whose account left the personal book stays listed rather
 than disappearing.
 
 At most one active goal per account, enforced by a partial unique index.
-Display only: no figure on `/budget` changes. Phase 4 is complete.
+Display only: no figure on `/budget` changes. An archived goal can be
+deleted, behind a confirmation the server checks; nothing else can, so an
+active goal is two deliberate steps from gone. Phase 4 is complete.
+
+Review before merging caught two pace errors that both made a goal look
+better than it was, and both are now unit-tested. The current period counted
+as a contribution still to make even after its payday money had landed:
+$100 in, $700 by March, read as on track while finishing $100 short. And
+history was measured from the account's first transaction rather than from
+where the bank feed begins, so a dormant bucket's first deposit would have
+averaged alone, about six times too optimistic.
 
 Spec: `docs/superpowers/specs/2026-10-01-phase-4c-savings-goals-design.md`.
 
@@ -604,7 +661,17 @@ filter would have hidden them · six periods for the average rather than the
 budget suggestions' three, so it is exactly the mean of the history table
 printed under it · the projected date is the end of the period the target
 is reached in, not its payday, because payday assumes the money lands on
-day one · no nav item, a link from `/budget` instead.
+day one · no nav item, a link from `/budget` instead · delete brought into
+scope at Tommy's request, archived goals only and with a server-checked
+confirmation, since a goal stores no money and deleting one changes no
+figure · the current period counts as a contribution still to make only if
+nothing has come in yet, after review showed the unconditional version was
+one period optimistic for a standing-order bucket · history is measured from
+the bank feed's coverage (the earliest first transaction across the bank's
+accounts), not the account's own first transaction, after review showed a
+dormant bucket going wrong both ways · a warning that hides a goal's figures
+hides its history table too, after both review bots caught a business
+account's flows rendering on the personal page.
 
 **Open questions for you:** whether Vehicle_Logbook.xlsx eventually joins the
 app; the AIA treatment, the entertainment 50% limit, and the Cashel St
