@@ -24,6 +24,13 @@
 // Archiving runs neither: it takes a goal out of tracking, so it can't create
 // a clash or a book leak, and it has to work on exactly the goals that fail
 // guard 1, such as one whose account has since moved to the business book.
+//
+// Deleting is the one permanent write here, so it has its own two guards:
+// only an ARCHIVED goal can be deleted (enforced in the delete's own `where`,
+// so an active goal is two deliberate steps from gone), and the form must
+// carry an explicit confirmation the server checks. Neither guard protects a
+// figure — a goal stores no money, its progress is always the account's
+// balance — they protect the goal itself from a stray click.
 
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
@@ -258,5 +265,48 @@ export async function unarchiveGoal(id: string): Promise<MutationResult> {
   } catch (error) {
     if (isClash(error)) return { ok: false, error: CLASH };
     return failed("unarchiveGoal", error);
+  }
+}
+
+/** The value the delete form's confirmation checkbox posts. */
+export const DELETE_CONFIRMATION = "delete";
+
+/**
+ * Did the form explicitly confirm a permanent delete?
+ *
+ * Checked on the server, because the checkbox's `required` attribute is a
+ * browser nicety a direct POST never sees. Exact match only: any other value,
+ * or none, is no.
+ */
+export function isDeleteConfirmed(form: FormData): boolean {
+  return form.get("confirm") === DELETE_CONFIRMATION;
+}
+
+/**
+ * Permanently delete an archived goal.
+ *
+ * `archivedAt: { not: null }` in the delete's own filter is the guard, not a
+ * read-then-delete: an active goal can't be deleted however the request was
+ * made, and there is no window between a check and the write for it to be
+ * unarchived in. A count of 0 is then told apart as "gone" or "still active"
+ * only to word the message.
+ */
+export async function deleteGoal(id: string): Promise<MutationResult> {
+  try {
+    const { count } = await prisma.savingsGoal.deleteMany({
+      where: { id, archivedAt: { not: null } },
+    });
+    if (count === 1) return { ok: true };
+
+    const stillThere = await prisma.savingsGoal.count({ where: { id } });
+    return {
+      ok: false,
+      error:
+        stillThere === 0
+          ? "That goal no longer exists."
+          : "Only an archived goal can be deleted. Archive it first.",
+    };
+  } catch (error) {
+    return failed("deleteGoal", error);
   }
 }

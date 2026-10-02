@@ -59,7 +59,9 @@ because that decides whether the number can quietly be wrong.
   Charts line in `AGENTS.md`.
 - **Goals on the cash accounts** (`src/lib/accounts/cash.ts`) or any account
   without an `akahuId`. There is no bank balance to measure.
-- **Hard delete.** Goals are archived, not deleted (§5).
+- ~~**Hard delete.**~~ *Brought into scope during implementation, 02/10/2026,
+  at Tommy's request.* See §5: archived goals only, with a confirmation
+  the server checks.
 - **Interest projection.** A savings bucket earns interest, which shows up
   in the net flow (§4) as the money it is. Projecting future interest would
   be a guess at a rate the app doesn't know.
@@ -329,6 +331,14 @@ plain module so it is unit-testable without a request context, and the
 - Editing re-checks the account even when it didn't change. A goal whose
   account has since moved books can't be edited back into being tracked;
   it can only be archived.
+- *Added during implementation, 02/10/2026:* **delete, archived goals
+  only.** `deleteGoal` filters on `archivedAt: { not: null }` in the delete
+  itself, so an active goal is two deliberate steps from gone and there is
+  no gap between a check and the write. The form carries a checkbox whose
+  value the action checks (`isDeleteConfirmed`), because the checkbox's
+  `required` attribute is never seen by a direct POST, and a `confirm()`
+  dialog would need JavaScript. Deleting changes no figure anywhere: a goal
+  stores no money, only a target against a balance it reads.
 - *Added during implementation, 02/10/2026:* **an archived goal can't be
   edited** until it is unarchived. Unarchiving is where its account is
   re-checked; editing it while archived would have to either skip that

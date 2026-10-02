@@ -4,7 +4,9 @@
 // The history table is the same array the average was computed from, so the
 // "average put in" on the card is the mean of the unstarred rows here and can
 // be checked by eye. An archived goal shows bare — no pace, no history — and
-// can only be unarchived, which is where its account gets re-checked.
+// can only be unarchived, which is where its account gets re-checked, or
+// deleted. Delete is offered here and nowhere else: an active goal is two
+// deliberate steps from gone.
 
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
@@ -14,8 +16,9 @@ import { formatNZD } from "@/lib/money";
 import { nzDate, nzToday } from "@/lib/budget/period";
 import { resolvePeriod } from "@/lib/budget/query";
 import { iso } from "@/lib/reports/fy";
+import { DELETE_CONFIRMATION } from "@/lib/goals/mutate";
 import { getGoalAccountOptions, getGoalDetail } from "@/lib/goals/query";
-import { ArchiveButton, GoalForm } from "../forms";
+import { ArchiveButton, DeleteGoalForm, GoalForm } from "../forms";
 import { GoalCard, HistoryTable } from "../parts";
 
 export const dynamic = "force-dynamic";
@@ -55,17 +58,29 @@ export default async function GoalPage({ params }: { params: Promise<{ id: strin
         />
 
         {archived ? (
-          <Card title="Archived">
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-              <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                {formatNZD(goal.targetCents)} in {goal.account.name}
-                {goal.targetDate ? `, by ${nzDate(goal.targetDate)}` : ""}. Not
-                tracked while archived. Unarchiving re-checks that the account
-                is still personal and has no other active goal.
-              </p>
-              <ArchiveButton id={goal.id} archived />
-            </div>
-          </Card>
+          <>
+            <Card title="Archived">
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+                <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+                  {formatNZD(goal.targetCents)} in {goal.account.name}
+                  {goal.targetDate ? `, by ${nzDate(goal.targetDate)}` : ""}. Not
+                  tracked while archived. Unarchiving re-checks that the account
+                  is still personal and has no other active goal.
+                </p>
+                <ArchiveButton id={goal.id} archived />
+              </div>
+            </Card>
+            <Card title="Delete">
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
+                  Removes the goal for good. No figure anywhere changes: a goal
+                  stores no money, only a target against {goal.account.name}&apos;s
+                  balance. Archiving keeps it; deleting can&apos;t be undone.
+                </p>
+                <DeleteGoalForm id={goal.id} name={goal.name} confirmValue={DELETE_CONFIRMATION} />
+              </div>
+            </Card>
+          </>
         ) : (
           <>
             <GoalCard goal={goal} />

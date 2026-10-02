@@ -19,6 +19,7 @@ import type { AccountOption } from "@/lib/goals/query";
 import {
   archiveGoalAction,
   createGoalAction,
+  deleteGoalAction,
   unarchiveGoalAction,
   updateGoalAction,
   type FormState,
@@ -159,6 +160,52 @@ export function ArchiveButton({ id, archived }: { id: string; archived: boolean 
       <div>
         <Button type="submit" variant={archived ? "secondary" : "ghost"} size="sm" disabled={pending}>
           {pending ? "Saving…" : archived ? "Unarchive" : "Archive goal"}
+        </Button>
+      </div>
+      {state?.error && (
+        <p role="alert" style={{ margin: 0, fontSize: "var(--text-xs)", color: "var(--status-error)" }}>
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+/**
+ * Permanent delete, offered only on an archived goal.
+ *
+ * A checkbox rather than a `confirm()` dialog, so it works with JavaScript
+ * disabled. Its `required` stops an unticked submit in the browser; the
+ * server checks the value again, since a direct POST skips the browser.
+ *
+ * `confirmValue` comes from the server page (`DELETE_CONFIRMATION`) rather
+ * than being imported here: `lib/goals/mutate.ts` imports Prisma, and this
+ * file is bundled for the browser.
+ */
+export function DeleteGoalForm({
+  id,
+  name,
+  confirmValue,
+}: {
+  id: string;
+  name: string;
+  confirmValue: string;
+}) {
+  const [state, formAction, pending] = useActionState<FormState, FormData>(
+    deleteGoalAction,
+    undefined,
+  );
+
+  return (
+    <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+      <input type="hidden" name="id" value={id} />
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: "var(--text-sm)" }}>
+        <input type="checkbox" name="confirm" value={confirmValue} required />
+        Delete &ldquo;{name}&rdquo; permanently
+      </label>
+      <div>
+        <Button type="submit" variant="danger" size="sm" disabled={pending}>
+          {pending ? "Deleting…" : "Delete goal"}
         </Button>
       </div>
       {state?.error && (

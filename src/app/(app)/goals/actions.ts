@@ -17,6 +17,8 @@ import {
   GOAL_FIELDS,
   archiveGoal,
   createGoal,
+  deleteGoal,
+  isDeleteConfirmed,
   parseGoalForm,
   unarchiveGoal,
   updateGoal,
@@ -126,4 +128,29 @@ export async function unarchiveGoalAction(
 
   revalidate(id);
   return undefined;
+}
+
+/**
+ * Permanently delete an archived goal, then go back to the list.
+ *
+ * The confirmation is checked here, on the server, because the checkbox's
+ * `required` is only a browser nicety. `deleteGoal` refuses an active goal
+ * in its own query, so archive-then-delete holds whatever was posted.
+ */
+export async function deleteGoalAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  if (!(await hasSession())) return UNAUTHORISED;
+
+  if (!isDeleteConfirmed(formData)) {
+    return { ok: false, error: "Tick the box to confirm. Nothing was deleted." };
+  }
+
+  const id = String(formData.get("id") ?? "");
+  const result = await deleteGoal(id);
+  if (!result.ok) return { ok: false, error: result.error };
+
+  revalidate(id);
+  redirect("/goals");
 }
