@@ -160,15 +160,27 @@ would split every contribution across two months.
 
 ### Periods left and the required contribution
 
-`periodsLeft(today, targetDate, anchorDay)` counts pay periods **from the
-current one up to and including the one containing the target date.** The
-current period counts, because money can still go in this period.
+`periodsLeft(today, targetDate, anchorDay, currentPeriodHasInflow)` counts
+**contributions still to make**: paydays still to come on or before the
+target date, plus the current period only if no money has come in on the
+account yet this period.
 
-- Target date in the current period: `1`.
-- Target date before today: `0`, which is the **"target date passed"**
-  state. No per-period figure is shown, since a required contribution over
-  zero periods doesn't exist. The goal says the date has passed and shows
-  the remainder.
+*Amended after review, 02/10/2026.* This originally counted the current
+period unconditionally, "because money can still go in this period". That
+holds for a top-up, but the buckets are fed by standing orders on payday,
+and "needed each pay period" is in effect the amount to set one to. With
+this period's $100 already in, $700 by 19/03/2027 read as six periods of
+$100 and "on track", when only five paydays remained and the goal would
+finish $100 short. Any inflow counts as "this period's money has landed",
+interest included, so the error is always towards one fewer period, never
+one more.
+
+- Target date in the current period, nothing in yet: `1`. Something in
+  already: `0`, the **"no payday left before it"** state.
+- Target date before today: `0`, the **"target date passed"** state.
+- Either `0`: no per-period figure, since a contribution spread over zero
+  periods doesn't exist, and the goal is **behind** unless reached.
+  `datePassed` tells the two apart for the wording.
 - `requiredPerPeriodCents = ceil(remainingCents / periodsLeft)`. **Rounded
   up**, so that paying the suggested amount every period actually reaches
   the target. Rounding down leaves the goal a few cents short on the last
@@ -199,17 +211,26 @@ other screen (invariant 5).
   cents over six periods is 1,666.83...), and an unrounded mean would carry
   float money into the on-track comparison and the projection. Rounded in
   `averageContributionCents` itself, so no caller ever sees the fraction.
-- **Only periods that start on or after the account's `historyStartDate`
-  count.** The period containing `historyStartDate` is incomplete: whatever
-  moved between that period's start and the first imported transaction
-  isn't in the data, so it would read as a smaller contribution than was
-  made. An account opened two months ago has one or two periods of history,
-  not six periods where four are zero. The trade-off is that a genuinely
-  new bucket loses its first, partial period from the average. The app
-  can't tell "opened mid-period" from "Akahu's history starts mid-period",
-  and dropping a real period understates the history, where keeping a
-  truncated one misstates it. If no period qualifies, the average is
+- **Only periods that start on or after the bank feed's coverage start
+  count.** A period the feed's history starts partway through is
+  incomplete: whatever moved before the data begins isn't in it, so it
+  would read as a smaller contribution than was made. The coverage start is
+  the **earliest first transaction across every account at the same bank**
+  (Akahu's connection). That can only be on or after the feed's true start,
+  so it never admits a truncated period; at worst it drops one that was in
+  fact covered. If the bank has never returned a transaction, the average is
   `null`, not zero, and not `NaN`.
+
+  *Amended after review, 02/10/2026.* This originally used the account's
+  own `historyStartDate`, which sync sets to the account's first
+  transaction, not to where the feed begins. On a dormant bucket that went
+  wrong both ways. ANZ Backup Saver, with a year of feed history and no
+  transactions, read "no history yet" when the truth was $0 going in. And
+  after a first-ever $500 deposit, the five genuinely empty periods before
+  it would be dropped, so the average read $500 a period instead of $83 and
+  the projection was about six times too optimistic. A period before an
+  account's first transaction but inside the feed's history is a real zero,
+  whether the account was dormant or didn't exist yet: nothing was put in.
 - The running period is excluded, for the reason 4b gives (spec §2): on
   day 5 the payday standing order may or may not have landed, and a
   partial period reads as a missed contribution.
@@ -217,8 +238,9 @@ other screen (invariant 5).
 ### Projection
 
 - **On track** when `averageContributionCents >= requiredPerPeriodCents`.
-- **Projected reach date**: `ceil(remaining / average)` periods, counting
-  the current one as the first (consistent with `periodsLeft`), reported as
+- **Projected reach date**: `ceil(remaining / average)` contributions,
+  starting with the current period only if nothing has come in yet, as
+  `periodsLeft` does (amended after review, 02/10/2026), reported as
   the **last day** of the period the target is reached in. Shown with or
   without a target date. *Amended during implementation, 02/10/2026:* this
   originally said the period's payday, which assumes the period's money
@@ -399,6 +421,12 @@ figures, rather than dropping it from the list. A goal that silently
 disappears because its account was remapped is a goal nobody notices has
 stopped being tracked.
 
+"In place of the figures" means all of them, the history table included.
+*Amended after review, 02/10/2026:* the first cut suppressed only the pace,
+so an account moved to BUSINESS would still have put its per-period flows
+and closing balances on this personal-only page, under a warning saying the
+goal wasn't tracked.
+
 ### `/goals` (new)
 
 `src/app/(app)/goals/page.tsx`, `export const dynamic = "force-dynamic"`,
@@ -432,7 +460,10 @@ savings account's balance, and a link to `/goals/new`.
   complete pay period for the last six: period label, net flow in, and
   closing balance. The closing balance is `openingBalanceCents` plus settled
   transactions up to the period end, and is shown only when
-  `openingBalanceCents` is known. Then the edit form and an Archive (or
+  `openingBalanceCents` is known **and the period is one the average
+  counts**. Before the feed's history begins, opening plus flows is just
+  the opening balance repeated backwards over months the data can't see
+  (amended after review, 02/10/2026). Then the edit form and an Archive (or
   Unarchive) button, each its own `<form>`.
 
 ### Navigation
@@ -455,7 +486,7 @@ thinks about this period's money.
 | 4 | Transfers | Not touched. Net flow is category- and pair-blind (§2). |
 | 5 | Dates | `targetDate` is `@db.Date`, parsed by `parseDateParam`, compared against `nzToday`. |
 | 6 | Server Actions | `hasSession()` on every action. Account book and the one-goal rule re-derived from the database, the latter enforced by a partial unique index. Create/edit `mode` comes from the action, not the form. |
-| 7 | Missing rows ≠ zero | Only periods starting on or after `historyStartDate` count toward the average, so a truncated first period doesn't either. No history means a `null` average, never zero. |
+| 7 | Missing rows ≠ zero | Only periods starting on or after the bank feed's coverage start count toward the average, so a truncated period doesn't. Inside coverage, a period with no transactions is a real zero. A bank with no history means a `null` average, never zero. |
 | 8 | Divide-by-zero | `periodsLeft === 0`, average `<= 0`, no history, non-positive target. All tested. |
 
 ---
@@ -467,16 +498,19 @@ Vitest, no database, as every spec since 3a §7.
 - `pace.test.ts`:
   - `periodsLeft`: target in the current period is 1; on the last day of
     the current period is 1; the day after it is 2; in the past is 0; an
-    anchor of 31 across February; the year boundary.
+    anchor of 31 across February; the year boundary; one fewer once the
+    current period's money has landed (the review case, 6 → 5), and 0 for
+    an unpassed date with no payday left.
   - `requiredPerPeriodCents`: rounds **up** (`$100.00` over 3 periods is
     `3334`, not `3333`); exact division unchanged; `periodsLeft === 0` is
     `null`; reached is `0` or `null`, not negative.
   - `averageContributionCents`: six periods; a sum that doesn't divide
-    (10,001 over six) comes back as a whole number of cents; the period
-    containing `historyStartDate` is excluded when it starts before it, and
-    included when `historyStartDate` is exactly its start; none qualifying
-    is `null`; a withdrawal period pulls the average down rather than being
-    ignored.
+    (10,001 over six) comes back as a whole number of cents; a period the
+    coverage start falls inside is excluded, and one starting exactly on it
+    included; a dormant bucket's empty periods count as real zeros ($500
+    after five empty periods averages $83.33, not $500); no transactions
+    inside coverage is $0, not `null`; no coverage is `null`; a withdrawal
+    period pulls the average down rather than being ignored.
   - `projection`: a positive average gives a payday date; a zero or
     negative average is `null`; reached is `null`.
   - `progress`: negative balance clamps the bar and keeps the figure; over

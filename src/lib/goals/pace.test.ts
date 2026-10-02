@@ -1,7 +1,9 @@
 // The savings-goal pace arithmetic. The cases that matter most are the ones
 // that would otherwise render a confident wrong figure: a required amount
-// rounded down so paying it falls short, an average carrying a fraction of a
-// cent, a truncated first period read as a small contribution, and a
+// rounded down so paying it falls short, a period whose payday money has
+// already landed counted as one still to pay, an average carrying a fraction
+// of a cent, a truncated period read as a small contribution, a dormant
+// bucket's real zeros dropped so one deposit reads as a habit, and a
 // projection divided by zero or by a shrinking balance.
 
 import { describe, expect, it } from "vitest";
@@ -70,35 +72,50 @@ describe("progress", () => {
 
 describe("periodsLeft", () => {
   it("is 1 when the target falls in the current period", () => {
-    expect(periodsLeft(TODAY, utcDate(2026, 9, 10), ANCHOR)).toBe(1);
+    expect(periodsLeft(TODAY, utcDate(2026, 9, 10), ANCHOR, false)).toBe(1);
   });
 
   it("is 1 on the last day of the current period, and 2 the day after", () => {
-    expect(periodsLeft(TODAY, utcDate(2026, 9, 19), ANCHOR)).toBe(1);
-    expect(periodsLeft(TODAY, utcDate(2026, 9, 20), ANCHOR)).toBe(2);
+    expect(periodsLeft(TODAY, utcDate(2026, 9, 19), ANCHOR, false)).toBe(1);
+    expect(periodsLeft(TODAY, utcDate(2026, 9, 20), ANCHOR, false)).toBe(2);
   });
 
   it("is 1 when the target is today", () => {
-    expect(periodsLeft(TODAY, TODAY, ANCHOR)).toBe(1);
+    expect(periodsLeft(TODAY, TODAY, ANCHOR, false)).toBe(1);
+  });
+
+  it("drops the current period once this period's money has landed", () => {
+    // The review case: $100 standing order already in on 20/09, target by
+    // 19/03/2027. Six periods by the calendar, five paydays still to come.
+    expect(periodsLeft(TODAY, utcDate(2027, 2, 19), ANCHOR, false)).toBe(6);
+    expect(periodsLeft(TODAY, utcDate(2027, 2, 19), ANCHOR, true)).toBe(5);
+  });
+
+  it("is 0 when the date hasn't passed but no payday is left before it", () => {
+    expect(periodsLeft(TODAY, utcDate(2026, 9, 19), ANCHOR, true)).toBe(0);
+  });
+
+  it("stays 0 for a passed date whether or not money landed", () => {
+    expect(periodsLeft(TODAY, utcDate(2026, 9, 1), ANCHOR, true)).toBe(0);
   });
 
   it("is 0 once the date has passed", () => {
-    expect(periodsLeft(TODAY, utcDate(2026, 9, 1), ANCHOR)).toBe(0);
+    expect(periodsLeft(TODAY, utcDate(2026, 9, 1), ANCHOR, false)).toBe(0);
   });
 
   it("crosses the year boundary", () => {
     // 20 Sep, 20 Oct, 20 Nov, 20 Dec, 20 Jan: the period containing 25 Jan
     // 2027 is the fifth.
-    expect(periodsLeft(TODAY, utcDate(2027, 0, 25), ANCHOR)).toBe(5);
+    expect(periodsLeft(TODAY, utcDate(2027, 0, 25), ANCHOR, false)).toBe(5);
   });
 
   it("clamps an anchor of 31 across February without skipping a period", () => {
     // Periods start 31 Jan, 28 Feb, 31 Mar. From 1 Feb, a target of 1 Mar is
     // in the second, and 31 Mar starts the third.
     const today = utcDate(2027, 1, 1);
-    expect(periodsLeft(today, utcDate(2027, 1, 27), 31)).toBe(1);
-    expect(periodsLeft(today, utcDate(2027, 2, 1), 31)).toBe(2);
-    expect(periodsLeft(today, utcDate(2027, 2, 31), 31)).toBe(3);
+    expect(periodsLeft(today, utcDate(2027, 1, 27), 31, false)).toBe(1);
+    expect(periodsLeft(today, utcDate(2027, 2, 1), 31, false)).toBe(2);
+    expect(periodsLeft(today, utcDate(2027, 2, 31), 31, false)).toBe(3);
   });
 });
 
@@ -137,21 +154,33 @@ describe("countedPeriods and averageContributionCents", () => {
     expect(Number.isInteger(average)).toBe(true);
   });
 
-  it("drops the period containing historyStartDate when it starts before it", () => {
-    // History starts mid-May: the 20 Apr – 19 May period is truncated, and
+  it("drops a period the feed's history starts partway through", () => {
+    // Coverage starts mid-May: the 20 Apr – 19 May period is truncated, and
     // so is everything before it.
-    const historyStart = utcDate(2026, 4, 5);
-    const counted = countedPeriods(flows(1, 2, 3, 4, 5, 6), historyStart);
+    const coverageStart = utcDate(2026, 4, 5);
+    const counted = countedPeriods(flows(1, 2, 3, 4, 5, 6), coverageStart);
     expect(counted.map((entry) => entry.netFlowCents)).toEqual([3, 4, 5, 6]);
   });
 
-  it("keeps a period whose start is exactly historyStartDate", () => {
+  it("keeps a period whose start is exactly the coverage start", () => {
     const counted = countedPeriods(flows(1, 2, 3, 4, 5, 6), window[2].start);
     expect(counted.map((entry) => entry.netFlowCents)).toEqual([3, 4, 5, 6]);
   });
 
-  it("averages only what counts, not six periods padded with zeros", () => {
+  it("leaves out periods before the feed's history rather than reading them as zeros", () => {
     expect(averageContributionCents(flows(0, 0, 0, 0, 5_000, 7_000), window[4].start)).toBe(6_000);
+  });
+
+  it("counts a dormant bucket's empty periods as the real zeros they are", () => {
+    // The review case: the feed reaches back a year, the bucket's first-ever
+    // deposit is $500 in the newest period. Averaged from the deposit alone
+    // it would read $500 a period; the true six-period figure is $83.33.
+    const coverageStart = utcDate(2025, 6, 16);
+    expect(averageContributionCents(flows(0, 0, 0, 0, 0, 50_000), coverageStart)).toBe(8_333);
+  });
+
+  it("reads an account with no transactions inside the feed's history as $0, not no history", () => {
+    expect(averageContributionCents(flows(0, 0, 0, 0, 0, 0), utcDate(2025, 6, 16))).toBe(0);
   });
 
   it("is null, not 0, when no period counts", () => {
@@ -173,7 +202,7 @@ describe("projection", () => {
   it("reports the last day of the period the target is reached in", () => {
     // $1,000 at $300 a period: 4 periods, counting this one. The fourth is
     // 20 Dec – 19 Jan.
-    expect(projection(100_000, 30_000, TODAY, ANCHOR)).toEqual({
+    expect(projection(100_000, 30_000, TODAY, ANCHOR, false)).toEqual({
       status: "on-date",
       by: utcDate(2027, 0, 19),
       periods: 4,
@@ -181,32 +210,47 @@ describe("projection", () => {
   });
 
   it("lands in the current period when one period's average covers it", () => {
-    expect(projection(5_000, 5_000, TODAY, ANCHOR)).toEqual({
+    expect(projection(5_000, 5_000, TODAY, ANCHOR, false)).toEqual({
       status: "on-date",
       by: utcDate(2026, 9, 19),
       periods: 1,
     });
   });
 
+  it("starts from next payday once this period's money has landed", () => {
+    // Same $1,000 at $300, but this period is already paid: the four
+    // contributions are 20 Oct, 20 Nov, 20 Dec and 20 Jan.
+    expect(projection(100_000, 30_000, TODAY, ANCHOR, true)).toEqual({
+      status: "on-date",
+      by: utcDate(2027, 1, 19),
+      periods: 4,
+    });
+    expect(projection(5_000, 5_000, TODAY, ANCHOR, true)).toEqual({
+      status: "on-date",
+      by: utcDate(2026, 10, 19),
+      periods: 1,
+    });
+  });
+
   it("refuses a zero or negative average instead of dividing by it", () => {
-    expect(projection(100_000, 0, TODAY, ANCHOR)).toEqual({ status: "not-growing" });
-    expect(projection(100_000, -2_000, TODAY, ANCHOR)).toEqual({ status: "not-growing" });
+    expect(projection(100_000, 0, TODAY, ANCHOR, false)).toEqual({ status: "not-growing" });
+    expect(projection(100_000, -2_000, TODAY, ANCHOR, false)).toEqual({ status: "not-growing" });
   });
 
   it("says no history rather than not growing when there is no average", () => {
-    expect(projection(100_000, null, TODAY, ANCHOR)).toEqual({ status: "no-history" });
+    expect(projection(100_000, null, TODAY, ANCHOR, false)).toEqual({ status: "no-history" });
   });
 
   it("has nothing to project once reached", () => {
-    expect(projection(0, 5_000, TODAY, ANCHOR)).toEqual({ status: "reached" });
-    expect(projection(-100, null, TODAY, ANCHOR)).toEqual({ status: "reached" });
+    expect(projection(0, 5_000, TODAY, ANCHOR, false)).toEqual({ status: "reached" });
+    expect(projection(-100, null, TODAY, ANCHOR, false)).toEqual({ status: "reached" });
   });
 
   it("stops at a horizon rather than walking a century of periods", () => {
     expect(
-      projection(MAX_PROJECTION_PERIODS + 1, 1, TODAY, ANCHOR),
+      projection(MAX_PROJECTION_PERIODS + 1, 1, TODAY, ANCHOR, false),
     ).toEqual({ status: "too-far" });
-    expect(projection(MAX_PROJECTION_PERIODS, 1, TODAY, ANCHOR).status).toBe("on-date");
+    expect(projection(MAX_PROJECTION_PERIODS, 1, TODAY, ANCHOR, false).status).toBe("on-date");
   });
 });
 
@@ -215,11 +259,39 @@ describe("goalPace", () => {
     balanceCents: 40_000,
     targetCents: 100_000,
     targetDate: utcDate(2027, 2, 15), // in the 20 Feb – 19 Mar period: 6 left
-    historyStartDate: window[0].start,
+    coverageStart: window[0].start,
     history: flows(10_000, 10_000, 10_000, 10_000, 10_000, 10_000),
+    currentPeriodHasInflow: false,
     today: TODAY,
     anchorDay: ANCHOR,
   };
+
+  it("is behind, not on track, in the review's standing-order case", () => {
+    // $100 already in this period, $700 by 19/03/2027, $100 a period going
+    // in. Five paydays left, so $120 is needed and $100 isn't enough.
+    const pace = goalPace({
+      ...base,
+      balanceCents: 10_000,
+      targetCents: 70_000,
+      targetDate: utcDate(2027, 2, 19),
+      currentPeriodHasInflow: true,
+    });
+    expect(pace.periodsLeft).toBe(5);
+    expect(pace.requiredPerPeriodCents).toBe(12_000);
+    expect(pace.onTrack).toBe(false);
+  });
+
+  it("is behind when no payday is left before an unpassed date", () => {
+    const pace = goalPace({
+      ...base,
+      targetDate: utcDate(2026, 9, 19),
+      currentPeriodHasInflow: true,
+    });
+    expect(pace.periodsLeft).toBe(0);
+    expect(pace.datePassed).toBe(false);
+    expect(pace.requiredPerPeriodCents).toBeNull();
+    expect(pace.onTrack).toBe(false);
+  });
 
   it("is on track when the average covers the required amount", () => {
     const pace = goalPace(base);
@@ -242,11 +314,12 @@ describe("goalPace", () => {
     expect(pace.projection.status).toBe("on-date");
   });
 
-  it("has no required pace once the date has passed", () => {
+  it("has no required pace, and is behind, once the date has passed", () => {
     const pace = goalPace({ ...base, targetDate: utcDate(2026, 8, 1) });
     expect(pace.periodsLeft).toBe(0);
+    expect(pace.datePassed).toBe(true);
     expect(pace.requiredPerPeriodCents).toBeNull();
-    expect(pace.onTrack).toBeNull();
+    expect(pace.onTrack).toBe(false);
   });
 
   it("calls a reached goal on track whatever the history", () => {
@@ -254,7 +327,7 @@ describe("goalPace", () => {
   });
 
   it("gives no verdict without history", () => {
-    const pace = goalPace({ ...base, historyStartDate: null });
+    const pace = goalPace({ ...base, coverageStart: null });
     expect(pace.averageContributionCents).toBeNull();
     expect(pace.averagedOver).toBe(0);
     expect(pace.onTrack).toBeNull();

@@ -22,11 +22,12 @@ import { goalWarnings, type GoalWarning } from "./warnings";
 export type HistoryRow = FlowPeriod & {
   /**
    * Opening balance plus settled transactions to the period's end. `null`
-   * when the account has no derived opening balance, rather than a figure
-   * missing everything before the first import.
+   * when the account has no derived opening balance, or for a period the
+   * feed's history doesn't fully cover, rather than a figure that only looks
+   * like a balance.
    */
   closingBalanceCents: number | null;
-  /** False for a period before `historyStartDate`: shown, not averaged. */
+  /** False for a period before the bank feed's history: shown, not averaged. */
   counted: boolean;
 };
 
@@ -43,7 +44,10 @@ export type GoalView = {
   warnings: GoalWarning[];
   /** `null` when a warning hides the figures, or for an archived goal. */
   pace: GoalPace | null;
-  /** The complete periods behind the average, oldest first. */
+  /**
+   * The complete periods behind the average, oldest first. Empty when a
+   * warning hides the figures, or for an archived goal.
+   */
   history: HistoryRow[];
 };
 
@@ -57,9 +61,9 @@ const goalInclude = {
       name: true,
       book: true,
       status: true,
+      connectionName: true,
       balanceCents: true,
       balanceAsAt: true,
-      historyStartDate: true,
       openingBalanceCents: true,
       syncResults: {
         orderBy: { syncRun: { startedAt: "desc" } },
@@ -74,12 +78,58 @@ type GoalRow = Awaited<
   ReturnType<typeof prisma.savingsGoal.findMany<{ include: typeof goalInclude }>>
 >[number];
 
-/** The complete periods behind every average, oldest first. */
-function windowFor(now: Date, anchorDay: number): PayPeriod[] {
+/** The running period, and the complete periods behind every average, oldest first. */
+function windowFor(now: Date, anchorDay: number): { current: PayPeriod; window: PayPeriod[] } {
   const current = payPeriodFor(nzToday(now), anchorDay);
-  // The running period is excluded: on day 5 the payday standing order may
-  // or may not have landed, and a partial period reads as a missed one.
-  return previousPeriods(current, HISTORY_PERIODS, anchorDay).reverse();
+  // The running period is excluded from the average: on day 5 the payday
+  // standing order may or may not have landed, and a partial period reads as
+  // a missed one. It is only asked one question, below: has anything landed?
+  return { current, window: previousPeriods(current, HISTORY_PERIODS, anchorDay).reverse() };
+}
+
+/**
+ * Where each bank's feed history begins: the earliest first transaction
+ * across every account at that bank (Akahu's connection).
+ *
+ * Per bank, not per account, because an account's own `historyStartDate` is
+ * its first transaction, and a dormant bucket's first transaction says
+ * nothing about how far back the feed reaches (`countedPeriods` in pace.ts
+ * has the failure that caused). Akahu's reach is a property of the bank. The
+ * minimum of first transactions can only be on or after the feed's true
+ * start, so it never admits a truncated period.
+ */
+async function coverageStarts(): Promise<Map<string, Date>> {
+  const rows = await prisma.account.groupBy({
+    by: ["connectionName"],
+    where: { connectionName: { not: null }, historyStartDate: { not: null } },
+    _min: { historyStartDate: true },
+  });
+  const starts = new Map<string, Date>();
+  for (const row of rows) {
+    if (row.connectionName && row._min.historyStartDate) {
+      starts.set(row.connectionName, row._min.historyStartDate);
+    }
+  }
+  return starts;
+}
+
+/**
+ * Has any money come in on the account during the running period?
+ *
+ * Any positive transaction, interest included: once this period's money has
+ * landed, the next contribution is next payday's (`periodsLeft` in pace.ts).
+ * Inflow rather than net flow, so a withdrawal the same week doesn't make an
+ * already-paid period look unpaid.
+ */
+async function hasInflowIn(accountId: string, period: PayPeriod): Promise<boolean> {
+  const count = await prisma.transaction.count({
+    where: {
+      accountId,
+      amountCents: { gt: 0 },
+      date: { gte: period.start, lte: period.end },
+    },
+  });
+  return count > 0;
 }
 
 /**
@@ -89,7 +139,11 @@ function windowFor(now: Date, anchorDay: number): PayPeriod[] {
  * findMany bucketed in JavaScript: the boundary stays `period.start` and
  * `period.end`, defined once in `period.ts`.
  */
-async function historyFor(goal: GoalRow, window: PayPeriod[]): Promise<HistoryRow[]> {
+async function historyFor(
+  goal: GoalRow,
+  window: PayPeriod[],
+  coverageStart: Date | null,
+): Promise<HistoryRow[]> {
   const accountId = goal.account.id;
   const sum = async (date: { gte?: Date; lte?: Date; lt?: Date }) =>
     (
@@ -107,7 +161,7 @@ async function historyFor(goal: GoalRow, window: PayPeriod[]): Promise<HistoryRo
   const counted = new Set(
     countedPeriods(
       window.map((period, i) => ({ period, netFlowCents: flows[i] })),
-      goal.account.historyStartDate,
+      coverageStart,
     ).map((entry) => entry.period.start.getTime()),
   );
 
@@ -116,22 +170,32 @@ async function historyFor(goal: GoalRow, window: PayPeriod[]): Promise<HistoryRo
 
   return window.map((period, i) => {
     if (running !== null) running += flows[i];
+    const isCounted = counted.has(period.start.getTime());
     return {
       period,
       netFlowCents: flows[i],
-      closingBalanceCents: running,
-      counted: counted.has(period.start.getTime()),
+      // Only where the data covers the whole period. Before the feed's
+      // history begins, opening + flows is not the balance at all, just the
+      // opening balance repeated backwards over months the data can't see.
+      // Inside it, a period before the account's first transaction really
+      // did close at the opening balance: nothing moved. Same boundary as
+      // the average, so a starred row carries no figure we can't stand behind.
+      closingBalanceCents: isCounted ? running : null,
+      counted: isCounted,
     };
   });
 }
 
 async function toView(
   goal: GoalRow,
-  window: PayPeriod[],
+  periods: { current: PayPeriod; window: PayPeriod[] },
+  coverage: Map<string, Date>,
   now: Date,
   anchorDay: number,
 ): Promise<GoalView> {
   const { account } = goal;
+  const coverageStart =
+    account.connectionName === null ? null : (coverage.get(account.connectionName) ?? null);
 
   const warnings = goalWarnings(
     {
@@ -152,7 +216,16 @@ async function toView(
 
   const active = goal.archivedAt === null;
   const hidden = warnings.some((warning) => warning.hidesFigures);
-  const history = active ? await historyFor(goal, window) : [];
+  // A warning that hides the figures hides ALL of them. The history table is
+  // figures too: for an account that has moved to the business book it would
+  // put business flows and balances on a personal-only page, under a warning
+  // saying the goal isn't tracked.
+  const [history, currentPeriodHasInflow] = active && !hidden
+    ? await Promise.all([
+        historyFor(goal, periods.window, coverageStart),
+        hasInflowIn(account.id, periods.current),
+      ])
+    : [[], false];
 
   return {
     id: goal.id,
@@ -171,8 +244,9 @@ async function toView(
             balanceCents: account.balanceCents,
             targetCents: goal.targetCents,
             targetDate: goal.targetDate,
-            historyStartDate: account.historyStartDate,
+            coverageStart,
             history,
+            currentPeriodHasInflow,
             today: nzToday(now),
             anchorDay,
           })
@@ -194,8 +268,11 @@ export async function getGoals(
     orderBy: [{ targetDate: { sort: "asc", nulls: "last" } }, { name: "asc" }],
   });
 
-  const window = windowFor(now, anchorDay);
-  const views = await Promise.all(rows.map((row) => toView(row, window, now, anchorDay)));
+  const periods = windowFor(now, anchorDay);
+  const coverage = await coverageStarts();
+  const views = await Promise.all(
+    rows.map((row) => toView(row, periods, coverage, now, anchorDay)),
+  );
 
   return {
     active: views.filter((view) => view.archivedAt === null),
@@ -210,9 +287,12 @@ export async function getGoalDetail(
   anchorDay: number,
   now: Date,
 ): Promise<GoalView | null> {
-  const row = await prisma.savingsGoal.findUnique({ where: { id }, include: goalInclude });
+  const [row, coverage] = await Promise.all([
+    prisma.savingsGoal.findUnique({ where: { id }, include: goalInclude }),
+    coverageStarts(),
+  ]);
   if (!row) return null;
-  return toView(row, windowFor(now, anchorDay), now, anchorDay);
+  return toView(row, windowFor(now, anchorDay), coverage, now, anchorDay);
 }
 
 export type AccountOption = {

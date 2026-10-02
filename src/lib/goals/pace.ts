@@ -60,12 +60,23 @@ export function progress(balanceCents: number, targetCents: number): GoalProgres
 }
 
 /**
- * Pay periods left to save in: the current one, up to and including the one
- * containing `targetDate`.
+ * Pay periods left to save in: paydays still to come on or before
+ * `targetDate`, plus the current period only if nothing has come in yet.
  *
- * The current period counts because money can still go in this period. A
- * target date before `today` is 0, the "date passed" state, which has no
- * required contribution at all.
+ * The buckets are fed by standing orders on payday, and "needed each pay
+ * period" is in effect an instruction for what to set one to. So the count is
+ * of contributions still to make, not of calendar periods. Counting the
+ * current period after its payday money had already landed was the original
+ * rule, and it was one period optimistic: $100 already in on the 20th, $700
+ * by March, read as six periods of $100 and "on track" when only five
+ * paydays remained and the goal would finish $100 short. Any inflow counts as
+ * "this period's money has landed", interest included. That errs towards one
+ * fewer period, never one more, which is the direction a savings plan should
+ * be wrong in.
+ *
+ * Two different zeros come out of this, and `goalPace` tells them apart with
+ * `targetDate < today`: the date has passed, or it hasn't but no payday is
+ * left before it.
  *
  * `today` and `targetDate` are UTC-midnight calendar dates — `nzToday()` and
  * a stored `@db.Date` — so the comparison is a date comparison, not an
@@ -75,6 +86,7 @@ export function periodsLeft(
   today: Date,
   targetDate: Date,
   anchorDay: number,
+  currentPeriodHasInflow: boolean,
 ): number {
   if (targetDate.getTime() < today.getTime()) return 0;
 
@@ -84,7 +96,7 @@ export function periodsLeft(
     period = payPeriodFor(period.nextPayday, anchorDay);
     count++;
   }
-  return count;
+  return currentPeriodHasInflow ? count - 1 : count;
 }
 
 /**
@@ -116,25 +128,35 @@ export type FlowPeriod = {
 };
 
 /**
- * The periods whose flow can be trusted: those starting on or after the
- * account's `historyStartDate`.
+ * The periods whose flow can be trusted: those starting on or after
+ * `coverageStart`, the date the bank feed's history begins.
  *
- * The period containing `historyStartDate` is incomplete when it starts
- * before it — whatever moved between the period start and the first imported
- * transaction isn't in the data, so it would read as a smaller contribution
- * than was made. That costs a genuinely new bucket its first, partial period,
- * because the app can't tell "opened mid-period" from "Akahu's history starts
- * mid-period", and understating the history beats misstating it.
+ * A period that starts before the feed's history does is incomplete:
+ * whatever moved before the data begins isn't in it, so it would read as a
+ * smaller contribution than was made.
  *
- * A null `historyStartDate` means nothing has ever been imported for the
- * account, so no period qualifies.
+ * This is deliberately NOT the account's own `historyStartDate`, which sync
+ * sets to the account's first transaction. Using that was the original rule,
+ * and on a dormant bucket it went wrong both ways: an account with no
+ * transactions read as "no history" when the truth was "nothing going in",
+ * and the period after a first-ever deposit would be averaged alone, the
+ * genuinely empty periods before it dropped, projecting a goal several times
+ * too optimistically. A period before an account's first transaction but
+ * inside the feed's history is a real zero, whether the account was dormant
+ * or didn't exist yet. Either way, nothing was put in.
+ *
+ * The caller passes the earliest first transaction across every account at
+ * the same bank (see `query.ts`). That can only be on or after the feed's
+ * true start, so it can never admit a truncated period; at worst it drops
+ * one that was in fact covered. A null `coverageStart` means the bank has
+ * never returned a transaction, so no period qualifies.
  */
 export function countedPeriods(
   periods: readonly FlowPeriod[],
-  historyStartDate: Date | null,
+  coverageStart: Date | null,
 ): FlowPeriod[] {
-  if (historyStartDate === null) return [];
-  const cutoff = historyStartDate.getTime();
+  if (coverageStart === null) return [];
+  const cutoff = coverageStart.getTime();
   return periods.filter((entry) => entry.period.start.getTime() >= cutoff);
 }
 
@@ -149,9 +171,9 @@ export function countedPeriods(
  */
 export function averageContributionCents(
   periods: readonly FlowPeriod[],
-  historyStartDate: Date | null,
+  coverageStart: Date | null,
 ): number | null {
-  const counted = countedPeriods(periods, historyStartDate);
+  const counted = countedPeriods(periods, coverageStart);
   if (counted.length === 0) return null;
 
   const total = counted.reduce((sum, entry) => sum + entry.netFlowCents, 0);
@@ -179,17 +201,19 @@ export type Projection =
 /**
  * When the target falls at the recent average.
  *
- * Counts the current period as the first, consistent with `periodsLeft`, and
- * reports the LAST day of the period the target is reached in. Payday at the
- * start of that period would be the optimistic reading: it assumes the
- * period's contribution lands on day one, which a top-up rather than a
- * standing order doesn't.
+ * The first contribution is the current period's only if nothing has come
+ * in yet, otherwise next payday's: the same rule as `periodsLeft`, for the
+ * same reason. Reports the LAST day of the period the target is reached in.
+ * Payday at the start of that period would be the optimistic reading: it
+ * assumes the period's contribution lands on day one, which a top-up rather
+ * than a standing order doesn't.
  */
 export function projection(
   remainingCents: number,
   averageCents: number | null,
   today: Date,
   anchorDay: number,
+  currentPeriodHasInflow: boolean,
 ): Projection {
   if (remainingCents <= 0) return { status: "reached" };
   if (averageCents === null) return { status: "no-history" };
@@ -201,6 +225,7 @@ export function projection(
   if (periods > MAX_PROJECTION_PERIODS) return { status: "too-far" };
 
   let period = payPeriodFor(today, anchorDay);
+  if (currentPeriodHasInflow) period = payPeriodFor(period.nextPayday, anchorDay);
   for (let i = 1; i < periods; i++) {
     period = payPeriodFor(period.nextPayday, anchorDay);
   }
@@ -212,14 +237,20 @@ export type GoalPace = {
   progress: GoalProgress;
   /** `null` when the goal has no target date. */
   periodsLeft: number | null;
-  /** `null` with no target date, or when the date has passed. */
+  /**
+   * The target date is before today. Tells the two zeros of `periodsLeft`
+   * apart: passed, or not passed but no payday left before it.
+   */
+  datePassed: boolean;
+  /** `null` with no target date, or no periods left. */
   requiredPerPeriodCents: number | null;
   averageContributionCents: number | null;
   /** How many periods the average is over — the page says so. */
   averagedOver: number;
   /**
-   * `null` when there's nothing to compare: no date, date passed, or no
-   * history. A reached goal is on track.
+   * A reached goal is on track. One with money still to go and no periods
+   * left is not, whether the date has passed or no payday remains before it.
+   * Otherwise `null` when there's nothing to compare: no date, or no history.
    */
   onTrack: boolean | null;
   projection: Projection;
@@ -229,9 +260,12 @@ export function goalPace(input: {
   balanceCents: number;
   targetCents: number;
   targetDate: Date | null;
-  historyStartDate: Date | null;
+  /** Where the bank feed's history begins. See `countedPeriods`. */
+  coverageStart: Date | null;
   /** Complete periods only — the running period is the caller's to exclude. */
   history: readonly FlowPeriod[];
+  /** Has any money come in during the running period so far? */
+  currentPeriodHasInflow: boolean;
   today: Date;
   anchorDay: number;
 }): GoalPace {
@@ -240,28 +274,37 @@ export function goalPace(input: {
   const left =
     input.targetDate === null
       ? null
-      : periodsLeft(input.today, input.targetDate, input.anchorDay);
+      : periodsLeft(
+          input.today,
+          input.targetDate,
+          input.anchorDay,
+          input.currentPeriodHasInflow,
+        );
   const required =
     left === null ? null : requiredPerPeriodCents(goalProgress.remainingCents, left);
 
-  const average = averageContributionCents(input.history, input.historyStartDate);
+  const average = averageContributionCents(input.history, input.coverageStart);
 
   let onTrack: boolean | null = null;
   if (goalProgress.reached) onTrack = true;
+  else if (left === 0) onTrack = false;
   else if (required !== null && average !== null) onTrack = average >= required;
 
   return {
     progress: goalProgress,
     periodsLeft: left,
+    datePassed:
+      input.targetDate !== null && input.targetDate.getTime() < input.today.getTime(),
     requiredPerPeriodCents: required,
     averageContributionCents: average,
-    averagedOver: countedPeriods(input.history, input.historyStartDate).length,
+    averagedOver: countedPeriods(input.history, input.coverageStart).length,
     onTrack,
     projection: projection(
       goalProgress.remainingCents,
       average,
       input.today,
       input.anchorDay,
+      input.currentPeriodHasInflow,
     ),
   };
 }

@@ -139,7 +139,13 @@ export function GoalCard({ goal, link = false }: { goal: GoalView; link?: boolea
                 pace.periodsLeft === 0 ? (
                   <KV
                     label={`Target date ${nzDate(goal.targetDate)}`}
-                    value={pace.progress.reached ? "reached" : "passed"}
+                    value={
+                      pace.progress.reached
+                        ? "reached"
+                        : pace.datePassed
+                          ? "passed"
+                          : "no payday left before it"
+                    }
                     tone={pace.progress.reached ? undefined : "var(--status-warning)"}
                     mono={false}
                   />
@@ -255,7 +261,7 @@ export function HistoryTable({ rows }: { rows: HistoryRow[] }) {
       </div>
       {anyUncounted && (
         <p style={{ ...muted, margin: "var(--space-3) 0 0" }}>
-          * Before or across the start of this account&apos;s history, so only
+          * Before or across the start of the bank feed&apos;s history, so only
           part of the period is in the data. Shown, but left out of the
           average.
         </p>
