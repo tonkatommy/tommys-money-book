@@ -471,6 +471,14 @@ export default async function BudgetPage({
               >
                 How past periods went
               </Link>
+              {/* Personal only, like the goals themselves (4c spec §1): on
+                  the business book this link would imply business goals
+                  exist. */}
+              {book === "PERSONAL" && (
+                <Link href="/goals" style={{ fontSize: "var(--text-sm)" }}>
+                  Savings goals
+                </Link>
+              )}
             </div>
           </Card>
         </div>

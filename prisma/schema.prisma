@@ -4,9 +4,16 @@
 // Category is what lets us enforce "never mix personal and business" in code
 // rather than by discipline.
 
+// `partialIndexes` (preview, since Prisma 7.4) exists for one index: the
+// one-active-goal-per-account rule on SavingsGoal. The alternative — a
+// hand-written `CREATE UNIQUE INDEX ... WHERE` in migration SQL — is invisible
+// to the schema, so the next `migrate dev` reads it as drift and generates a
+// migration that drops it. A guard an unrelated future migration quietly
+// removes is worse than a preview flag. Adopted 02/10/2026, Phase 4c spec §5.
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -167,6 +174,7 @@ model Account {
   transactions  Transaction[]
   syncResults   AccountSyncResult[]
   categoryRules CategoryRule[]
+  savingsGoals  SavingsGoal[]
 }
 
 model Category {
@@ -366,6 +374,43 @@ model TaxYearAdjustment {
   rentalMortgageInterestCents Int?
 
   updatedAt DateTime @updatedAt
+}
+
+// A target for one savings account's balance.
+//
+// Progress is the account's own Akahu balance, never a figure stored here —
+// there is deliberately no "amount saved" column, because any stored copy of
+// the balance is a second source of truth that goes stale between syncs. The
+// balance is the one number reconciled against the bank every day.
+//
+// At most one ACTIVE goal per account, enforced by the database. Two goals on
+// one bucket would each claim the whole balance — $5,000 counted toward a
+// holiday and a car at once — and every figure would still match the bank.
+// The index is partial so an archived goal doesn't block the next one on the
+// same bucket. The write path also checks, but only to word the error: a
+// check-then-insert under READ COMMITTED lets two concurrent writes both pass.
+// Phase 4c spec §3 and §5.
+model SavingsGoal {
+  id          String    @id @default(cuid())
+  name        String
+  accountId   String
+  targetCents Int
+  targetDate  DateTime? @db.Date // null = no deadline, so no required pace
+  note        String?
+
+  // Set by hand. A reached goal is not auto-archived: a balance can cross the
+  // target and dip back under after a withdrawal, and archiving on the
+  // crossing would hide the goal at exactly the moment it stopped being met.
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // No onDelete: Cascade. Accounts are never deleted, and if one ever were,
+  // silently taking its goals with it would be the wrong default.
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([accountId], where: { archivedAt: null })
 }
 
 // One row per sync attempt — the audit trail that makes "the sync silently
