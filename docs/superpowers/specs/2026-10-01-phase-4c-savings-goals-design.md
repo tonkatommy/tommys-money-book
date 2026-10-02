@@ -5,7 +5,8 @@
 [Phase 2 discovery](../../phase-2-discovery.md) §5b (the bucket accounts);
 [Phase 4b budget history design](2026-09-19-phase-4b-budget-history-design.md).
 **Status:** agreed with Tommy 01/10/2026 (framing in §1, review decisions in
-§10), ready to implement.
+§10). Implemented 02/10/2026 in PR #31. Changes made during implementation
+and review are marked inline where they amend this spec.
 
 ---
 

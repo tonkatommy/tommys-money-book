@@ -146,6 +146,35 @@ Rule specificity is DESCRIPTION > MERCHANT > AKAHU_CATEGORY, and that order is
 deliberate. Flag a broad MERCHANT rule that would swallow a more specific case —
 "IAG" is three policies and only the landlord one is a deductible rental expense.
 
+## Savings goals
+
+A goal (`src/lib/goals/`) measures one PERSONAL account's Akahu balance
+against a target. Flag:
+
+- **Any stored progress.** A column or cache holding "amount saved" is a
+  second source of truth that goes stale between syncs. Progress is the
+  account's balance, read live.
+- **Two active goals able to share an account.** Each would claim the whole
+  balance. The partial unique index on `SavingsGoal.accountId` is the guard;
+  the check in `mutate.ts` only words the error. A write path that makes a
+  goal active (create, edit, unarchive) without the account checks in
+  `assertCanTrack`, or that doesn't map `P2002` to the clash message.
+- **Counting the current period as a contribution still to make after money
+  has landed in it.** `periodsLeft` and `projection` take
+  `currentPeriodHasInflow` for exactly this; dropping it makes every
+  standing-order goal one period optimistic.
+- **Measuring history from an account's own `historyStartDate`.** That is
+  its first transaction, not where the feed begins. Coverage is the earliest
+  first transaction across the bank's accounts (`coverageStarts` in
+  `query.ts`); a dormant bucket's empty periods before its first deposit are
+  real zeros.
+- **Any figure shown when a warning has `hidesFigures`**, the history table
+  included. For an account moved to BUSINESS it puts business figures on a
+  personal page.
+- **A category or kind filter on net flow.** Net flow is every transaction
+  on the account by design; goals must not touch categorisation or transfer
+  pairing, and the expense sign flip (invariant 2) does not apply here.
+
 ## Testing conventions — do not ask for more than this
 
 Tests are Vitest with **no database**. Pure logic is unit-tested; anything
@@ -183,6 +212,17 @@ A good finding here is "this new pure function has a branch nothing covers", not
   reports rules matching nothing.
 - **Scripts are CLI-first.** Destructive ones are dry-run by default and require
   `--confirm`.
+- **Prisma's `partialIndexes` preview flag.** Adopted for the one-active-goal
+  index. A hand-written index would be invisible to the schema, and the next
+  `migrate dev` would drop it.
+- **Archiving a goal skips the account checks.** It takes a goal out of
+  tracking, so it can't create a clash or a book leak, and it must work on a
+  goal whose account has since left the personal book.
+- **Goals can be deleted, but only once archived**, enforced in the delete's
+  own `where`, with a confirmation the server checks. A goal stores no money,
+  so deleting one changes no figure.
+- **No `accountType` filter on the goal account picker.** Most ANZ buckets
+  come through from Akahu as `CHECKING`; a `SAVINGS` filter would hide them.
 
 ## Where bugs have actually been found
 
@@ -198,6 +238,19 @@ Weight attention here — these are real defects this codebase has had:
   it; the values must come back from the action.
 - A rule pattern short enough to match a payment *reference* containing the
   business name, filing a purchase as capital introduced.
+- An instant (`archivedAt`, `balanceAsAt`) formatted with `nzDate` directly.
+  `nzDate` reads UTC fields, which is right for a `@db.Date` and a day early
+  for most of every NZ morning on a timestamp. Instants go through `nzToday`
+  first.
+- A savings goal counting its current period as still to pay after the
+  payday standing order had landed, reading "on track" for a goal that would
+  finish one contribution short.
+- A goal's history measured from the account's first transaction, so a
+  dormant bucket's first deposit averaged alone, about six times too
+  optimistic.
+- A client component importing a constant from a module that imports
+  Prisma, which bundles server code for the browser. Pass the value down as
+  a prop from the server page instead.
 
 ## Tone
 
