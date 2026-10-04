@@ -76,9 +76,10 @@ Design decisions worth noting:
   correction survives every rule change and every daily sync — otherwise the
   sync would quietly restore precisely the answer that was wrong, and the books
   would still balance.
-- **Reconciliation needs an opening balance.** Akahu only reaches back about two
-  years, so "sum of stored transactions equals the bank balance" can never hold
-  on its own. The balance that predates our earliest transaction is derived once
+- **Reconciliation needs an opening balance.** Akahu only reaches back about a
+  year (to 16/07/2025 for these banks, against the two the plan hoped for), so
+  "sum of stored transactions equals the bank balance" can never hold on its
+  own. The balance that predates our earliest transaction is derived once
   at baseline; drift is measured against that from then on.
 - **And it needs pending transactions.** The bank's reported balance includes
   card authorisations that haven't settled; the transaction feed contains only
@@ -96,6 +97,11 @@ Design decisions worth noting:
   filtered on, rather than as the SQL expression the plan first called for:
   the pay period already solves the identical problem that way, and the result
   is unit-testable without a database.
+- **A savings goal stores no progress.** Progress is the account's own Akahu
+  balance, the one figure reconciled against the bank every day, so a goal
+  can't drift from the bank. A partial unique index allows one active goal
+  per account: two goals on one bucket would each count the whole balance,
+  and every figure would still match the bank.
 
 ## Roadmap
 
@@ -364,7 +370,11 @@ from it. At most one active goal per account, enforced by a partial unique
 index (Prisma's `partialIndexes` preview), because two goals on one bucket
 would each count the whole balance while every figure still matched the
 bank. It's display only: nothing on `/budget` changes. Reached from a link on
-`/budget` rather than a nav item.
+`/budget` rather than a nav item. Archived goals can be deleted; active ones
+can't. Review before merging caught two pace errors that made a goal look
+better than it was (a period already paid counted as one still to pay, and a
+dormant bucket's history measured from its first deposit), both now fixed
+and unit-tested.
 
 That completes Phase 4 as planned.
 
