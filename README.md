@@ -9,6 +9,9 @@ for NZ tax time (IR3 rental and business income, GST threshold monitoring).
 Runs on a homelab. Single user. LAN/Tailscale only — nothing exposed to the
 internet.
 
+**Using the app rather than building it?** Go straight to the
+[User guide](#user-guide).
+
 ## Why
 
 Spreadsheets work until they don't. Manual CSV downloads from two banks,
@@ -248,6 +251,386 @@ docker compose up -d --build
 Three services: the Next.js app on :3000, Postgres, and the sync worker
 (no exposed port — it only talks to Postgres and Akahu). Migrations are never
 run automatically; apply them with `npm run db:migrate`.
+
+## User guide
+
+How to use the running app day to day. The setup steps above get it running;
+this section covers everything after that.
+
+### What it can and cannot do
+
+**It can:**
+
+- Pull every transaction from the connected ANZ and BNZ accounts through
+  Akahu, once a day at 7am NZ time, with no CSV downloads.
+- Check each account against the bank's own balance every day and flag any
+  difference.
+- Keep two sets of books, **Personal** and **Business** (Tommy Tinkers), that
+  never mix.
+- Categorise most transactions automatically with rules, and let you correct
+  the rest by hand. A hand correction is never overwritten.
+- Run a budget on the pay period (20th to 19th by default). It shows what is
+  safe to spend today, whether you are ahead of or behind pace, and which
+  bills haven't come out yet.
+- Close each period with a one-click decision per category: keep, carry or
+  match.
+- Show how the last six complete pay periods went against budget.
+- Pair up money moved between your own accounts, so it never counts as
+  income or spending.
+- Record cash spending the bank never saw.
+- Report the NZ financial year (01/04 to 31/03) per book: by category, month
+  by month, plus a live GST registration monitor.
+- Build the IR3 pack (rental, business, other income and home office figures)
+  and export it as an `.xlsx` for your accountant.
+- Track savings goals against a savings account's real bank balance.
+- Work on a phone or a desktop, and work with JavaScript turned off.
+
+**It cannot, by design or not yet:**
+
+| You might expect to… | What actually happens |
+| --- | --- |
+| Start a sync from the browser | The **Sync** button opens the status page. It doesn't fetch anything. Syncs run on the worker's schedule, or from the command line (see [Run a sync right now](#run-a-sync-right-now)). |
+| Edit a bank transaction's date, amount or description | You can't. Those are the bank's record. You can change the category and add notes. Only cash entries you typed yourself are fully editable. |
+| Delete a transaction | There is no delete, for bank rows or cash entries. |
+| Split one transaction across two categories | Not supported. One transaction, one category. |
+| Add, rename or delete categories and rules in the app | Categories and rules are code, in `src/lib/categories/definitions.ts`, loaded with `npm run categories:seed`. |
+| Assign an account to a book in the app | It's a command: `npm run accounts:map`. Until that runs, an unmapped account's transactions can't be categorised. |
+| Confirm every transfer suggestion from the Transfers screen | Only the uncontested ones. Contested pairs are deliberately CLI-only (see [Transfers to confirm](#transfers-to-confirm-transfers)). |
+| Bulk-apply an income or transfer category | The bulk bar on Transactions only offers expense categories. Set income categories one row at a time from the transaction's own page. |
+| See pending card transactions | Only settled transactions are imported. Pending ones show as a total on Sync status and nowhere else. |
+| See anything before 16/07/2025 | Akahu's history for these banks only goes back that far. Earlier years are in the old Excel tracker. |
+| Set a savings goal on the business book, or one goal across several accounts | Goals are personal only, one account each, and one active goal per account. |
+| File the IR3, run a GST return, or get tax advice | It prepares the figures and lists the open questions. Filing, and the judgement calls, stay with you and your accountant. |
+| Reach it from the internet, or give someone their own login | It's single user and LAN/Tailscale only, with one shared password. |
+| Use a light theme | There is only a dark theme. |
+
+### Getting in
+
+1. **Open it.** On the home network, browse to `http://<homelab-host>:3000`.
+   Away from home, connect to Tailscale first and use the machine's Tailscale
+   name or IP with the same port. On a dev machine it's
+   <http://localhost:3000>. Phones use the same address.
+2. **Sign in.** The password is whatever `APP_PASSWORD` is set to in `.env`
+   (or the `APP_PASSWORD_FILE` secret). There's no username. A wrong password
+   says "Incorrect password." and there's no lockout. If you were sent to the
+   login page from a bookmark, you land back on that page after signing in.
+3. **Staying signed in.** A session lasts 30 days on each device. **Sign out**
+   is at the top right at every screen width. Use it on a phone you might
+   lose.
+
+If the login page says "Login is unavailable. Check server logs.",
+`APP_PASSWORD` or `SESSION_SECRET` isn't set for the app container.
+
+### Finding your way around
+
+On a desktop the menu is a sidebar on the left. Below 768px wide it becomes a
+tab bar along the bottom, with shorter labels:
+
+| Sidebar | Tab bar | Goes to | For |
+| --- | --- | --- | --- |
+| Budget | Budget | `/budget` | The home screen: am I alright this pay period? |
+| Transactions | Txns | `/transactions` | Every transaction, filters, categorising, cash entries |
+| Transfers | Pairs | `/transfers` | Moves between your own accounts, waiting to be confirmed |
+| Reports | Reports | `/reports` | Financial-year figures, GST monitor, IR3 pack |
+| Set budget | Set up | `/budget/setup` | Budget amounts, fixed bills, payday |
+| Month end | Close | `/budget/review` | Close last period and set this one |
+| Sync status | Sync | `/sync` | Is the bank feed still arriving? |
+
+Two screens have no menu item. They're linked from the Budget screen instead:
+**How past periods went** (`/budget/history`) and **Savings goals**
+(`/goals`).
+
+The header on every screen shows:
+
+- **Pay period**: the current period, say "20 Sep – 19 Oct", and the days
+  until payday.
+- **Personal / Business**: the book toggle. Switching keeps you on the same
+  screen. The choice lives in the address (`?book=BUSINESS`), so you can
+  bookmark a business view and the back button works as expected. A few
+  screens have a fixed book and show a plain label instead: a category's
+  detail page, savings goals (personal only) and the IR3 pack (both books at
+  once).
+- **Sync** (desktop only) and **Sign out**.
+
+### Words this app uses
+
+Plain-English definitions for the accounting terms that come up.
+
+| Term | Meaning here |
+| --- | --- |
+| **Book** | A separate set of accounts. Personal is your own money, Business is Tommy Tinkers. Every account and category belongs to exactly one book. |
+| **Category** | What a transaction was for: Groceries, Vehicle — Fuel, and so on. Each one is an expense, income, transfer or owner category. |
+| **Tax tag** | A label on a category saying which line of the tax return it feeds: rental income, business expense, home office, and so on. The reports go by tag rather than by category name. |
+| **Transfer** | Money moved between two of your own accounts *in the same book*. Both legs are linked as a pair and net to zero, so it's neither income nor spending. |
+| **Owner** | Money moved *between the books*, for example personal money paid into the business account. To the business that's owner's funds or drawings, not a transfer. |
+| **Fixed bill** | A budget line with a due day, such as rent or insurance. It's held aside in full until it comes out, rather than paced day by day. |
+| **Everyday (flexible) category** | A budget line you spend gradually, such as groceries. It's measured against pace. |
+| **Pace** | How much of a budget you'd expect to have used by today if you spent evenly across the period. |
+| **Reconciliation / drift** | Checking that the transactions held add up to the bank's own balance. *Drift* is the difference. Zero is good. |
+| **Pending** | Card payments the bank has authorised but not yet settled. They're in the bank's balance but not in the feed yet. |
+| **FY** | The NZ financial (tax) year, 01/04 to 31/03. FY2027 is 01/04/2026 to 31/03/2027. |
+| **GST threshold** | If business turnover goes over $60,000 in any 12 months, you have to register for GST. |
+| **IR3** | The individual income tax return for people with income other than salary, such as rent or a sole-trader business. |
+
+### Two calendars, on purpose
+
+The budget screens run on **pay periods** (20th to 19th) because they answer
+"how much until payday?". The reports run on the **financial year** and
+**calendar months** because IRD says so. The two never line up, so August on
+the Budget screen isn't the same August as in Reports. Every report figure
+prints its exact date range next to it. Check that range before quoting a
+number.
+
+### The screens
+
+#### Budget (`/budget`)
+
+The daily check. Before any budget exists it shows a **first-run** screen
+with your average spend per category over the last three pay periods. Choose
+to build the budget from those averages and it opens Set budget with every
+figure filled in. Nothing is saved until you press Save.
+
+Once a budget exists:
+
+- **Safe to spend today** is money in the bank, minus bills that haven't come
+  out yet, minus everyday budgets you haven't touched. Under it is the same
+  figure per day until payday.
+- **Ahead / behind pace**: everyday spending so far against a mark showing
+  where even spending would have you today, plus "if you carry on at this
+  rate", a projection to the end of the period.
+- **Everyday categories** are listed worst pace first. "Spent · not budgeted"
+  means there's spending but no budget yet. Tap a category for its detail
+  page: the daily spending pattern, its transactions, and a trend chart.
+- **Bills still to hit** lists unpaid fixed bills by due date. "Estimate"
+  means the amount is a guess from past bills.
+- Two warnings can appear at the top. Read them first, because both mean
+  every figure is understated:
+  - *N transactions have no category*, with a link to fix them.
+  - *N accounts are not assigned to a set of books*: run
+    `npm run accounts:map`.
+
+At the bottom: next payday, **How past periods went**, and (personal book
+only) **Savings goals**.
+
+#### Set budget (`/budget/setup`)
+
+- One amount per category, saved together with a single **Save**.
+- Tick **fixed** and give a due day for bills. **Pin all N bills** fills
+  these in from bills the app has noticed recurring.
+- **Pay cycle**: the day of the month payday lands on, which starts each
+  period, and **Show half a period at a time**. Paid monthly but find a
+  month's money hard to pace? That option halves what Safe to spend shows,
+  so you see one fortnight at a time. It's display only: no stored figure
+  changes.
+
+A budget carries forward. A category without a new figure this period uses
+its most recent one, so you only change what changes.
+
+#### Month end (`/budget/review`)
+
+Last period, category by category, with one decision each:
+
+- **Keep**: the same budget again.
+- **Carry**: the same budget plus what you underspent, or minus what you
+  overspent ("Repay"), for this period only.
+- **Match**: set the budget to what you actually spent.
+
+Decisions apply to the current period. Last period's figures are never
+rewritten, so you can reopen the review and still see what was budgeted at
+the time.
+
+#### How past periods went (`/budget/history`)
+
+The last six *complete* pay periods against budget, with the running one left
+out. Halfway through a period everything looks under budget, which tells you
+nothing. It shows which categories run over every time and which are padded,
+with an adjustment hint where the pattern is consistent. The chart needs
+JavaScript, but the table under it holds every number.
+
+#### Transactions (`/transactions`)
+
+- **Default view**: the current pay period. Each row shows what it did to the
+  budget, for example "$108.60 left in Groceries".
+- **Filter**: search payee or description, account, category, a from/to date
+  range, and **Needs a category**. Filters live in the address, so a filtered
+  view can be bookmarked. With a custom date range the "left in…" figures are
+  hidden, because they only mean something within a pay period.
+- **Badges**: *cash* (you typed it in), *transfer* (part of a confirmed pair),
+  *Needs a category*.
+- **Bulk categorise**: tick rows, pick a category in the bar at the bottom,
+  then **Apply to N selected**. Choosing "clear the category" removes it.
+- **Tap a row** for its detail page:
+  - *What the bank says*: the facts, read-only for bank rows. It also shows
+    what Akahu called it and who decided the category: you, a rule, or a
+    confirmed transfer.
+  - *Category*: change it here. Saving marks the row as decided by hand, so
+    no rule or sync will ever change it back.
+  - *Notes*: anything the bank's description doesn't say, such as which job
+    it was for or who to split it with.
+  - *Entry*: cash entries only. Edit date, description, payee and amount.
+- **Add cash entry**: choose the book, date, description, amount and
+  direction (in or out), plus an optional category. It's saved to that
+  book's Cash account. The category must belong to the book you chose, and
+  a mismatch is refused.
+
+#### Transfers to confirm (`/transfers`)
+
+The Transfers screen (`/transfers`) lists suggested pairs that need a human.
+Pairs the app can prove, such as ANZ transfers where each side names the
+other account, are confirmed automatically during the sync and never appear
+here.
+
+- **High / Medium / Low confidence** groups are *uncontested*: each outgoing
+  payment has exactly one possible match. One button confirms the whole
+  group.
+- **Contested** pairs have no button on purpose. One outgoing payment has two
+  or more possible matches on the same day for the same amount. A standing
+  order and a flatmate's payment are the classic case, and picking the wrong
+  one would quietly erase real income. Run `npm run transfers:detect` to see
+  them. It prints the exact `transfers:confirm` command for each one, which
+  you run after checking it.
+- **Owner, not transfer** marks a pair that crosses books. It's money between
+  you and the business, not a transfer.
+
+An unconfirmed transfer is being counted as income on one side and spending
+on the other, so clear this queue regularly.
+
+#### Reports (`/reports`)
+
+Per book, per financial year. Pick the year with the selector.
+
+- **Reports** (index): money in, money out and net for the FY, plus the **GST
+  registration monitor**, which compares business sales over the last 12
+  months against the $60,000 threshold.
+- **By category**: income and expenses ranked separately, with each one's
+  share.
+- **Month by month**: twelve calendar months of income, expenses and net.
+  The current month is marked as partial.
+- **IR3 pack**: covers both books at once (the book toggle has no effect
+  here). Sections: *Rental — Cashel St*, *Tommy Tinkers*, *Other taxable
+  income* and *Home office* (eligible costs × 12.57%). Two figures the bank
+  feed can't see are entered here once a year: the **Ray White management
+  fee** and the **ASB mortgage interest** from the loan statement. Leave
+  either blank and the report says so loudly. Mortgage repayments stay out
+  of deductible expenses until the interest figure is entered. **Export**
+  downloads the pack as an `.xlsx`.
+
+Read every warning on the IR3 pack before passing figures on. The 12.57% rate
+is only verified for FY2027, and any other year is flagged. The open
+questions (AIA treatment, the 50% entertainment limit) are printed as caveats
+for your accountant rather than answered.
+
+#### Savings goals (`/goals`)
+
+Personal book only. A goal is one savings account, a target amount and,
+optionally, a target date. Progress *is* the account's bank balance, so
+nothing about it is stored separately and it can't drift from the bank.
+
+- **New goal**: name, account, target and target date. The date must be in
+  the future when you create the goal.
+- Each goal shows how much is still to go and, with a date, what you need to
+  put in each pay period. It also shows your average over recent periods and
+  a projected finish date.
+- The goal's own page lists the pay periods behind that average, so you can
+  check it by eye.
+- **Archive** a finished goal. Only archived goals can be **deleted**, and
+  deleting needs a confirmation box ticked first.
+- One active goal per account, because two goals on one account would both
+  count the whole balance.
+
+Goals are display only. They don't change anything on the Budget screen.
+
+#### Sync status (`/sync`)
+
+Is the database still filling itself? A sync that has quietly stopped looks
+just like one with nothing new to import, so check here when numbers look
+stale.
+
+- **Accounts**: balance, book, and badges. *balanced* means zero drift.
+  *drift $x* is a mismatch, which turns red if it persists. *needs mapping*
+  means no book is assigned. *needs re-consent* means the Akahu connection
+  has lapsed. *$x pending* is normal on card accounts.
+- **Recent sync runs**: when each ran, success or failure, new rows, and
+  "already held". Some "already held" rows are healthy, because each sync
+  re-reads the last seven days to catch late-posted transactions.
+- Alerts at the top flag a sync that's overdue or failing.
+
+### How do I…
+
+#### Fix a transaction in the wrong category?
+
+Just this once: open it from Transactions and change the category, or tick
+several rows and bulk-apply one. If it keeps happening, add a rule instead
+(see [Fixing a category that's wrong](#fixing-a-category-thats-wrong)) so
+future syncs get it right.
+
+#### Clear everything uncategorised?
+
+Use the link in the warning on Budget, or Transactions → **Needs a
+category** → Apply. Work down the list with bulk categorise. Run
+`npm run categories:review` to see the same queue grouped by pattern, which
+shows where a new rule would cover many rows at once.
+
+#### Record cash I spent?
+
+Transactions → **Add cash entry**. Categorise the original ATM withdrawal as
+*Cash Withdrawals*. The cash entry records where the money actually went.
+
+#### See what the business spent between two dates?
+
+Switch to **Business**, open Transactions, set From and To, then Apply.
+Bookmark the resulting address if you'll want it again.
+
+#### Hand my accountant the IR3 figures?
+
+Reports → **IR3 pack** → pick the FY → enter the management fee and mortgage
+interest → read the warnings → **Export**.
+
+#### Check whether today's transactions are in?
+
+Open **Sync status**. Look at the latest run and each account's "Last
+synced". Banks post late, so a transaction from today may only arrive in a
+day or two.
+
+#### Run a sync right now?
+
+On the homelab:
+
+```bash
+docker compose exec worker npx tsx src/scripts/sync-daily.ts
+```
+
+On a dev machine, `npm run sync:daily`. Both run the same code as the
+scheduled 7am sync.
+
+#### Deal with a new bank account?
+
+It appears on Sync status as *needs mapping* after the next sync. Assign it a
+book:
+
+```bash
+npm run accounts:map -- "Account name" PERSONAL
+```
+
+Its transactions can be categorised after that.
+
+#### Deal with "needs re-consent"?
+
+Akahu's access to that bank has lapsed. Reconnect the bank at
+[my.akahu.nz](https://my.akahu.nz). The next sync then catches up.
+
+### When something looks wrong
+
+| You see | Likely cause | Do this |
+| --- | --- | --- |
+| Figures seem low | Uncategorised transactions, or an unmapped account | Follow the warnings at the top of Budget |
+| A number hasn't changed since yesterday | The sync didn't run (host asleep, worker stopped) | Sync status. The worker catches up by itself on startup if the last good sync is over 36 hours old. |
+| "Database unreachable" on Sync status | Postgres is down | `docker compose up -d db` |
+| An account shows persistent drift | A missing or doubled transaction | Compare that account against the bank statement |
+| A transfer counted as income | The pair isn't confirmed yet | Transfers screen, or the CLI for contested ones |
+| "Your session has expired" on save | The 30-day session ran out mid-form | Reload, sign in, submit again |
+| Cash entry fails to save | Cash accounts don't exist yet | `npm run accounts:seed-cash` (the app normally does this on startup) |
+| A category you picked was refused | It belongs to the other book | Choose a category from the transaction's own book |
 
 ## Backups
 
