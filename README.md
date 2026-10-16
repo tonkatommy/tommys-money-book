@@ -262,11 +262,14 @@ The best option is a Tailscale certificate, which every browser already
 trusts. With MagicDNS and HTTPS enabled for the tailnet:
 
 ```bash
-sudo tailscale cert --cert-file ops/nginx/certs/fullchain.pem --key-file ops/nginx/certs/privkey.pem <host>.<tailnet>.ts.net
+sudo tailscale cert --min-validity 720h --cert-file ops/nginx/certs/fullchain.pem --key-file ops/nginx/certs/privkey.pem <host>.<tailnet>.ts.net
 ```
 
 Then browse to `https://<host>.<tailnet>.ts.net`. These last 90 days, so
 re-run it and `docker compose restart nginx` before they lapse.
+`--min-validity 720h` is what makes a re-run actually renew: without it,
+Tailscale hands back the cached cert as long as it hasn't expired yet, and the
+restart changes nothing.
 
 For LAN-only access, a self-signed certificate works; the browser warns once
 and you accept it:
