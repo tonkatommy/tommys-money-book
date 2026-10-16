@@ -307,3 +307,8 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# TLS certificates for nginx. The private key must never be committed; the
+# .gitkeep is only there so the bind-mounted directory exists on a fresh clone.
+ops/nginx/certs/*
+!ops/nginx/certs/.gitkeep

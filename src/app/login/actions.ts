@@ -38,6 +38,11 @@ export async function login(
     cookieStore.set(SESSION_COOKIE_NAME, signSession(), {
       httpOnly: true,
       sameSite: "lax",
+      // Production is only ever served through nginx over HTTPS, so the
+      // cookie must never ride a plaintext request, not even the one to :80
+      // that nginx is about to redirect. Browsers treat localhost as secure,
+      // so `npm start` on the host still logs in fine; dev skips it entirely.
+      secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: MAX_SESSION_AGE_MS / 1000,
     });
