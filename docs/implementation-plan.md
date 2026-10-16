@@ -560,6 +560,12 @@ surprises you, you find out in week one, not after months of building.
   the Akahu dashboard if ever in doubt.
 - **HTTPS even on LAN** — a self-signed cert or Tailscale's built-in certs; bank
   data shouldn't cross the wire in plaintext even at home.
+  **Implemented 16/10/2026** as an nginx service in front of the app. It is
+  the only container published to the LAN; the app and db are bound to
+  localhost. Certificates are mounted from `ops/nginx/certs/` and are
+  source-agnostic (`tailscale cert` or self-signed). The session cookie is
+  `Secure` in production. No HSTS yet, because with a self-signed cert it
+  removes the click-through and can lock you out.
 - **Backups:** nightly `pg_dump` to a separate volume/NAS, and periodically test
   a restore. The corrupted-tracker episodes are the argument for this; a
   database you back up nightly and can restore beats a spreadsheet on OneDrive.

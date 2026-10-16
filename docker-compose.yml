@@ -1,7 +1,7 @@
 # Tommy's Money Book — homelab deployment
 #
-# Two services for Phase 0: the Next.js app and Postgres. The sync worker
-# joins as a third service in Phase 1.
+# Five services: nginx (TLS), the Next.js app, Postgres, the sync worker and
+# the nightly backup. nginx is the only one reachable from the LAN.
 #
 # Usage:
 #   cp .env.example .env   (then set a real POSTGRES_PASSWORD)
@@ -59,7 +59,34 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:-}
       SESSION_SECRET_FILE: ${SESSION_SECRET_FILE:-}
     ports:
-      - "3000:3000"
+      # Localhost only, same as the db. Everything from the LAN goes through
+      # nginx over HTTPS; publishing 3000 on every interface would leave a
+      # plaintext side door straight past it. This mapping is just an escape
+      # hatch for checking the app from the host itself if nginx is down.
+      - "127.0.0.1:3000:3000"
+
+  nginx:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      # Read by the template, for the HTTP -> HTTPS redirect. Must match the
+      # host side of the 443 mapping below.
+      NGINX_HTTPS_PORT: ${NGINX_HTTPS_PORT:-443}
+      # Opt-in for the image's 15-local-resolvers script, which reads Docker's
+      # embedded DNS address into NGINX_LOCAL_RESOLVERS for the template's
+      # `resolver` line. Without it nginx refuses to start.
+      NGINX_ENTRYPOINT_LOCAL_RESOLVERS: "1"
+    ports:
+      # Overridable because a homelab host often has something on 80/443
+      # already (Pi-hole, another proxy).
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      # Read-only: nginx reads its config and certs, it never writes them.
+      - ./ops/nginx/templates:/etc/nginx/templates:ro
+      - ./ops/nginx/certs:/etc/nginx/certs:ro
 
   worker:
     build:

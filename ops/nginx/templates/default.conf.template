@@ -1,0 +1,78 @@
+# nginx in front of the Next.js app: terminates TLS so bank data never crosses
+# the LAN in plaintext, then proxies to the app over the compose network.
+#
+# This is a template, not a plain config. The official image runs envsubst over
+# /etc/nginx/templates/*.template at startup and writes the result to
+# /etc/nginx/conf.d/. It only substitutes variables that exist in the
+# container's environment, so nginx's own $host, $scheme and friends pass
+# through untouched. The output is named default.conf on purpose: it replaces
+# the image's stock default.conf, which would otherwise serve the nginx welcome
+# page to any request with `Host: localhost`.
+
+# Plain HTTP exists only to bounce people onto HTTPS. Nothing is proxied here,
+# so a session cookie never travels over it (it is also marked Secure, so a
+# browser won't send it to this port in the first place).
+server {
+    listen 80 default_server;
+    server_name _;
+    server_tokens off;
+
+    # $host drops any port the browser used, so the HTTPS port is spelled out.
+    # ":443" in a URL is legal and browsers normalise it away.
+    return 301 https://$host:${NGINX_HTTPS_PORT}$request_uri;
+}
+
+server {
+    listen 443 ssl default_server;
+    http2 on;
+    server_name _;
+    server_tokens off;
+
+    # Whatever produced them (tailscale cert, mkcert, openssl), the pair must
+    # land under these two names. See README, "HTTPS".
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL:1m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # No Strict-Transport-Security, deliberately. HSTS makes a browser refuse
+    # the "proceed anyway" click-through on a certificate error, which with a
+    # self-signed or expired cert locks you out of your own books until the
+    # max-age runs out. Worth adding only once the cert is publicly trusted
+    # (Tailscale's are) and renewal is automated.
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy same-origin always;
+
+    # Matches the 1 MB cap Next.js puts on Server Action bodies, so an
+    # oversized POST is turned away here rather than read in full by Node.
+    client_max_body_size 1m;
+
+    # Docker's embedded DNS (NGINX_LOCAL_RESOLVERS is filled in by the image's
+    # 15-local-resolvers script, enabled from docker-compose.yml). Combined with proxy_pass on a variable below,
+    # this makes nginx re-resolve `app` every 10 seconds instead of once at
+    # startup. Without it, `docker compose up -d --build` recreates the app on
+    # a new IP and nginx keeps sending to the old one: 502s until nginx is
+    # restarted by hand.
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+    set $app_upstream http://app:3000;
+
+    location / {
+        proxy_pass $app_upstream;
+        proxy_http_version 1.1;
+
+        # Server Actions refuse any POST whose Origin doesn't match Host (or
+        # X-Forwarded-Host). $http_host is the header exactly as the browser
+        # sent it, port included; $host would drop a non-default port and
+        # every form submit would fail the CSRF check.
+        proxy_set_header Host              $http_host;
+        proxy_set_header X-Forwarded-Host  $http_host;
+        # Next builds absolute URLs (the /login redirect in src/proxy.ts) from
+        # this, so redirects stay on https rather than bouncing through :80.
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+}

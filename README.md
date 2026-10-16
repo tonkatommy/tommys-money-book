@@ -245,9 +245,43 @@ categorised too, rather than arriving in the review queue every month.
 docker compose up -d --build
 ```
 
-Three services: the Next.js app on :3000, Postgres, and the sync worker
-(no exposed port — it only talks to Postgres and Akahu). Migrations are never
-run automatically; apply them with `npm run db:migrate`.
+nginx on :80 and :443, the Next.js app behind it, Postgres, the sync worker
+(no exposed port — it only talks to Postgres and Akahu) and the backup job.
+Only nginx listens on the LAN; the app and the db are bound to localhost.
+Migrations are never run automatically; apply them with `npm run db:migrate`.
+
+nginx needs a certificate before it will start; see below.
+
+### HTTPS
+
+nginx terminates TLS and proxies to the app. It reads exactly two files,
+`ops/nginx/certs/fullchain.pem` and `ops/nginx/certs/privkey.pem`, and doesn't
+care what made them. That directory is gitignored apart from its `.gitkeep`.
+
+The best option is a Tailscale certificate, which every browser already
+trusts. With MagicDNS and HTTPS enabled for the tailnet:
+
+```bash
+sudo tailscale cert --cert-file ops/nginx/certs/fullchain.pem --key-file ops/nginx/certs/privkey.pem <host>.<tailnet>.ts.net
+```
+
+Then browse to `https://<host>.<tailnet>.ts.net`. These last 90 days, so
+re-run it and `docker compose restart nginx` before they lapse.
+
+For LAN-only access, a self-signed certificate works; the browser warns once
+and you accept it:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -days 825 -subj "/CN=moneybook" -keyout ops/nginx/certs/privkey.pem -out ops/nginx/certs/fullchain.pem
+```
+
+If 80 or 443 are already taken on the host, set `NGINX_HTTP_PORT` and
+`NGINX_HTTPS_PORT` in `.env`.
+
+The session cookie is marked `Secure` in production, so the built app only
+logs in over HTTPS (or on `localhost`, which browsers treat as secure).
+Plain `http://<host>:3000` from another machine won't keep you signed in;
+that's the point.
 
 ## Backups
 
@@ -297,6 +331,7 @@ command but not a dead disk. Point it at a NAS bind mount to fix that.
 
 - Read-only Akahu tokens stored as Docker secrets — never in the repo or database
 - LAN-only binding, remote access via Tailscale, HTTPS even on the local network
+  (nginx terminates TLS; the app itself is bound to localhost)
 - Nightly database backups on a separate volume, restore-tested weekly
 
 ## Status
