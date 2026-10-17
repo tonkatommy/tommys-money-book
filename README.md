@@ -283,7 +283,9 @@ this section covers everything after that.
 - Build the IR3 pack (rental, business, other income and home office figures)
   and export it as an `.xlsx` for your accountant.
 - Track savings goals against a savings account's real bank balance.
-- Work on a phone or a desktop, and work with JavaScript turned off.
+- Work on a phone or a desktop. Most screens work with JavaScript turned
+  off; bulk categorisation requires JavaScript (categorise individual
+  transactions from their detail pages instead).
 
 **It cannot, by design or not yet:**
 
@@ -477,8 +479,10 @@ JavaScript, but the table under it holds every number.
 
 The Transfers screen (`/transfers`) lists suggested pairs that need a human.
 Pairs the app can prove, such as ANZ transfers where each side names the
-other account, are confirmed automatically during the sync and never appear
-here.
+other account, do not appear here. Sync does not save these tier-1 pairs.
+After importing new transfers, preview them with `npm run transfers:detect`,
+then run `npm run transfers:detect -- --confirm` to save the deterministic
+pairs. Other suggestions still need human confirmation.
 
 - **High / Medium / Low confidence** groups are *uncontested*: each outgoing
   payment has exactly one possible match. One button confirms the whole
@@ -487,8 +491,9 @@ here.
   or more possible matches on the same day for the same amount. A standing
   order and a flatmate's payment are the classic case, and picking the wrong
   one would quietly erase real income. Run `npm run transfers:detect` to see
-  them. It prints the exact `transfers:confirm` command for each one, which
-  you run after checking it.
+  them. It prints a `transfers:confirm` command for each one. Run it to
+  preview the operation; after checking the pair, append `--confirm` to
+  that command and run it again to save the pair.
 - **Owner, not transfer** marks a pair that crosses books. It's money between
   you and the business, not a transfer.
 
@@ -573,8 +578,12 @@ shows where a new rule would cover many rows at once.
 
 #### Record cash I spent?
 
-Transactions → **Add cash entry**. Categorise the original ATM withdrawal as
-*Cash Withdrawals*. The cash entry records where the money actually went.
+Use Transactions → **Add cash entry** only for cash spending that has no
+recorded bank withdrawal. A withdrawal categorised as *Cash Withdrawals*
+already counts as spending: adding purchases funded by it would count the
+same money again in Budget and Reports. Do not add those purchases as
+separate cash entries. Before your first cash entry, run
+`npm run accounts:seed-cash` to create the Cash accounts.
 
 #### See what the business spent between two dates?
 
@@ -629,7 +638,7 @@ Akahu's access to that bank has lapsed. Reconnect the bank at
 | An account shows persistent drift | A missing or doubled transaction | Compare that account against the bank statement |
 | A transfer counted as income | The pair isn't confirmed yet | Transfers screen, or the CLI for contested ones |
 | "Your session has expired" on save | The 30-day session ran out mid-form | Reload, sign in, submit again |
-| Cash entry fails to save | Cash accounts don't exist yet | `npm run accounts:seed-cash` (the app normally does this on startup) |
+| Cash entry fails to save | Cash accounts don't exist yet | Run `npm run accounts:seed-cash`; startup does not create them |
 | A category you picked was refused | It belongs to the other book | Choose a category from the transaction's own book |
 
 ## Backups
