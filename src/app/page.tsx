@@ -9,7 +9,8 @@
 // nav item among five rather than the front door.
 
 import { redirect } from "next/navigation";
+import { HOME_PATH } from "@/lib/auth/next-path";
 
 export default function Home() {
-  redirect("/budget");
+  redirect(HOME_PATH);
 }
