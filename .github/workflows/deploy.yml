@@ -1,0 +1,123 @@
+# Check every pull request, and deploy to the homelab on every merge to main.
+#
+# One workflow rather than two, so the checks a PR passed are the very same
+# job that gates the deploy, with no second copy to drift. Pull requests run
+# `verify` only; `deploy` is skipped unless the run is on main.
+#
+# The homelab is LAN/Tailscale only, so a GitHub-hosted runner joins the
+# tailnet as an ephemeral, tagged node and SSHes in. The SSH key is locked by
+# `command=` in authorized_keys to ops/deploy/deploy.sh, so all this workflow
+# can ever do on the host is ask for one commit to be deployed. What deploying
+# means (backup, migrate, restart, health check) lives in that script, on the
+# host, where it can be read next to the compose file it drives.
+#
+# A self-hosted runner would be simpler to wire up, and is exactly what GitHub
+# advises against for a public repo: a fork's pull request could try to run
+# its own code on the box that holds the bank feed.
+#
+# Third-party actions are pinned to a commit, not a tag. Tags can be moved;
+# a moved tag here would run someone else's code with a key into the homelab.
+
+name: CI and deploy
+
+on:
+  # `pull_request`, never `pull_request_target`. This one runs a fork's code
+  # with a read-only token and no secrets; the _target variant hands it the
+  # base repo's secrets, which here include a key into the homelab.
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # Re-run by hand after fixing something on the host (a full disk, a lapsed
+  # cert) without needing a commit to trigger it.
+  workflow_dispatch:
+
+# Per branch or PR: a new push to a PR cancels its own stale check. Main never
+# cancels, so a merge's run is never killed by the next one. The deploy job
+# has its own, stricter group below.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # The same three checks AGENTS.md asks for before a PR. Run on the PR,
+    # then again on main, because a merge can still combine two PRs that each
+    # passed alone.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # Matches the node:24-alpine base in the Dockerfile.
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # src/generated/prisma is gitignored, and typecheck needs it. Generating
+      # never touches a database; the URL only has to parse.
+      - run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint
+
+  deploy:
+    needs: verify
+    # Pull requests (ref refs/pull/N/merge) and hand-run dispatches from other
+    # branches stop here. deploy.sh would refuse a SHA that isn't on main
+    # anyway; this saves tunnelling into the homelab just to be told no.
+    if: github.ref == 'refs/heads/main'
+    # Two merges in quick succession must not deploy over each other. Queue
+    # rather than cancel: cancelling mid-migration is worse than waiting.
+    # This group lives on the job, not the workflow: GitHub keeps only one
+    # pending run per group, so a workflow-wide group would let a busy PR's
+    # checks silently replace a queued deploy.
+    concurrency:
+      group: deploy-homelab
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Secrets live on the environment rather than the repo, so nothing but a
+    # job that names it can read them. Add yourself as a required reviewer on
+    # it in Settings if you ever want a manual go/no-go before each deploy.
+    environment: production
+    steps:
+      - name: Join the tailnet
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          # The ACL grants tag:ci port 22 on the homelab and nothing else.
+          tags: tag:ci
+          ping: ${{ vars.DEPLOY_HOST }}
+
+      - name: Deploy ${{ github.sha }}
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+          # StrictHostKeyChecking=yes: an unknown or changed host key fails
+          # the job instead of being trusted on first use. The command string
+          # is just the SHA; the forced command on the host ignores anything
+          # else and validates this.
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes \
+            -o ServerAliveInterval=30 \
+            "$DEPLOY_USER@$DEPLOY_HOST" "$GITHUB_SHA"

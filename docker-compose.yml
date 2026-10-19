@@ -1,7 +1,8 @@
 # Tommy's Money Book — homelab deployment
 #
 # Five services: nginx (TLS), the Next.js app, Postgres, the sync worker and
-# the nightly backup. nginx is the only one reachable from the LAN.
+# the nightly backup. nginx is the only one reachable from the LAN. A sixth,
+# migrate, is a one-shot behind the "tools" profile; see ops/deploy/deploy.sh.
 #
 # Usage:
 #   cp .env.example .env   (then set a real POSTGRES_PASSWORD)
@@ -113,6 +114,21 @@ services:
       # too means log timestamps read in NZ time rather than UTC.
       TZ: Pacific/Auckland
     # No ports. The worker reaches out to Postgres and Akahu; nothing reaches in.
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    # In the "tools" profile, so `docker compose up -d` never starts it. It is
+    # run on purpose, once, by ops/deploy/deploy.sh:
+    #   docker compose --profile tools run --rm migrate
+    profiles: ["tools"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-moneybook}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-moneybook}
 
   backup:
     # The same Postgres image, purely for its client tools — pg_dump must be
