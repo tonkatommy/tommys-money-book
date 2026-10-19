@@ -251,7 +251,9 @@ docker compose up -d --build
 nginx on :80 and :443, the Next.js app behind it, Postgres, the sync worker
 (no exposed port — it only talks to Postgres and Akahu) and the backup job.
 Only nginx listens on the LAN; the app and the db are bound to localhost.
-Migrations are never run automatically; apply them with `npm run db:migrate`.
+On the homelab, migrations are applied by the deploy on every merge to main,
+straight after a backup (see "Deploying" below). Anywhere else they are never
+run automatically; apply them with `npm run db:migrate`.
 
 nginx needs a certificate before it will start; see below.
 
@@ -288,6 +290,66 @@ The session cookie is marked `Secure` in production, so the built app only
 logs in over HTTPS (or on `localhost`, which browsers treat as secure).
 Plain `http://<host>:3000` from another machine won't keep you signed in;
 that's the point.
+
+### Deploying
+
+Every merge to main deploys itself
+([.github/workflows/deploy.yml](.github/workflows/deploy.yml)). The workflow
+runs the tests, typecheck and lint, joins the tailnet as a throwaway node
+tagged `tag:ci`, and SSHes to the homelab with a key that can do exactly one
+thing: run [ops/deploy/deploy.sh](ops/deploy/deploy.sh) with the merged
+commit's SHA. That script checks the SHA is on `origin/main`, fast-forwards
+the checkout, builds the images, takes a backup, runs `prisma migrate deploy`,
+restarts the stack and checks it came up. If any step fails the job goes red
+and whatever was already running keeps running.
+
+There is no automatic rollback. If a deploy breaks something after its
+migration ran, decide by hand between fixing forward and restoring the backup
+it just took (`npm run db:backup:list`, then see "Backups").
+
+One-time setup, on the homelab (Linux, with the repo already cloned and
+running as in "Full stack"):
+
+1. Generate a key used for nothing else. The private half goes to GitHub, so
+   create it anywhere and delete it afterwards:
+
+   ```bash
+   ssh-keygen -t ed25519 -N "" -C moneybook-deploy -f moneybook-deploy
+   ```
+
+2. Add the public half to `~/.ssh/authorized_keys` of the user that owns the
+   checkout (and is in the `docker` group), locked to the script. `restrict`
+   turns off port forwarding, agent forwarding and the terminal:
+
+   ```text
+   command="/path/to/tommys-money-book/ops/deploy/deploy.sh",restrict ssh-ed25519 AAAA... moneybook-deploy
+   ```
+
+3. In the Tailscale admin console, add `tag:ci` to `tagOwners` and an ACL
+   rule letting `tag:ci` reach the homelab on port 22 only. Then create an
+   OAuth client with the `auth_keys` write scope and the `tag:ci` tag.
+
+4. Create a GitHub environment called `production` (Settings, Environments)
+   and give it:
+
+   | Kind     | Name                 | Value                                                     |
+   | -------- | -------------------- | --------------------------------------------------------- |
+   | Secret   | `TS_OAUTH_CLIENT_ID` | from step 3                                               |
+   | Secret   | `TS_OAUTH_SECRET`    | from step 3                                               |
+   | Secret   | `DEPLOY_SSH_KEY`     | the private key from step 1                               |
+   | Secret   | `DEPLOY_KNOWN_HOSTS` | output of `ssh-keyscan <host>.<tailnet>.ts.net`, run once |
+   | Variable | `DEPLOY_HOST`        | `<host>.<tailnet>.ts.net`                                 |
+   | Variable | `DEPLOY_USER`        | the user from step 2                                      |
+
+5. Protect main (Settings, Branches) so nothing lands on it without a PR.
+   Anything that reaches main now runs on the homelab.
+
+To re-run a deploy without a new commit, use "Run workflow" on the Deploy
+action. To deploy by hand from the homelab itself:
+
+```bash
+git fetch origin main && ops/deploy/deploy.sh "$(git rev-parse origin/main)"
+```
 
 ## User guide
 
@@ -728,6 +790,9 @@ command but not a dead disk. Point it at a NAS bind mount to fix that.
 - LAN-only binding, remote access via Tailscale, HTTPS even on the local network
   (nginx terminates TLS; the app itself is bound to localhost)
 - Nightly database backups on a separate volume, restore-tested weekly
+- Deploys reach the homelab over Tailscale with an SSH key that can only run
+  the deploy script, and only for commits already on main; no self-hosted
+  runner, so a fork's pull request has no route onto the box
 
 ## Status
 

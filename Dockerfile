@@ -61,3 +61,24 @@ COPY --from=build --chown=node:node /app/package.json /app/tsconfig.json ./
 
 USER node
 CMD ["npx", "tsx", "src/worker/index.ts"]
+
+# ---- Stage 5: migrations ----------------------------------------------------
+# A one-shot container that runs `prisma migrate deploy` and exits, used by
+# ops/deploy/deploy.sh. Neither of the other images can do it: the app's
+# standalone runtime ships no Prisma CLI, and the worker has no prisma/ folder.
+#
+# `migrate deploy`, not `migrate dev`. Deploy only applies migration files
+# already committed; dev diffs the schema, may generate new SQL, and will
+# offer to reset the database when it detects drift. Against the books that
+# back an IR3 return, the second one is not a risk worth carrying.
+FROM node:24-alpine AS migrate
+WORKDIR /app
+# Prisma's schema engine is still a native binary and looks for libssl at
+# start-up. Without it on Alpine it fails to detect an OpenSSL version and
+# refuses to run.
+RUN apk add --no-cache openssl
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node prisma ./prisma
+COPY --chown=node:node prisma.config.ts package.json ./
+USER node
+CMD ["npx", "prisma", "migrate", "deploy"]
