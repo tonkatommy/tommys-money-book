@@ -293,9 +293,10 @@ that's the point.
 
 ### Deploying
 
-Every merge to main deploys itself
-([.github/workflows/deploy.yml](.github/workflows/deploy.yml)). The workflow
-runs the tests, typecheck and lint, joins the tailnet as a throwaway node
+Every pull request into main runs the tests, typecheck and lint, and every
+merge to main runs them again and then deploys itself
+([.github/workflows/deploy.yml](.github/workflows/deploy.yml)). The deploy
+job joins the tailnet as a throwaway node
 tagged `tag:ci`, and SSHes to the homelab with a key that can do exactly one
 thing: run [ops/deploy/deploy.sh](ops/deploy/deploy.sh) with the merged
 commit's SHA. That script checks the SHA is on `origin/main`, fast-forwards
@@ -329,8 +330,8 @@ running as in "Full stack"):
    rule letting `tag:ci` reach the homelab on port 22 only. Then create an
    OAuth client with the `auth_keys` write scope and the `tag:ci` tag.
 
-4. Create a GitHub environment called `production` (Settings, Environments)
-   and give it:
+4. Create a GitHub environment called `production` (Settings, Environments),
+   set its deployment branches to `main` only, and give it:
 
    | Kind     | Name                 | Value                                                     |
    | -------- | -------------------- | --------------------------------------------------------- |
@@ -341,11 +342,12 @@ running as in "Full stack"):
    | Variable | `DEPLOY_HOST`        | `<host>.<tailnet>.ts.net`                                 |
    | Variable | `DEPLOY_USER`        | the user from step 2                                      |
 
-5. Protect main (Settings, Branches) so nothing lands on it without a PR.
-   Anything that reaches main now runs on the homelab.
+5. Protect main (Settings, Branches) so nothing lands on it without a PR,
+   and require the `verify` check to pass. Anything that reaches main now
+   runs on the homelab.
 
-To re-run a deploy without a new commit, use "Run workflow" on the Deploy
-action. To deploy by hand from the homelab itself:
+To re-run a deploy without a new commit, use "Run workflow" on the CI and
+deploy action, from main. To deploy by hand from the homelab itself:
 
 ```bash
 git fetch origin main && ops/deploy/deploy.sh "$(git rev-parse origin/main)"
