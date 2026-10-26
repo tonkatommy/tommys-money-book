@@ -251,8 +251,8 @@ docker compose up -d --build
 nginx on :80 and :443, the Next.js app behind it, Postgres, the sync worker
 (no exposed port — it only talks to Postgres and Akahu) and the backup job.
 Only nginx listens on the LAN; the app and the db are bound to localhost.
-On the homelab, migrations are applied by the deploy on every merge to main,
-straight after a backup (see "Deploying" below). Anywhere else they are never
+On the homelab, migrations are applied by each deploy, straight after a
+backup (see "Deploying" below). Anywhere else they are never
 run automatically; apply them with `npm run db:migrate`.
 
 nginx needs a certificate before it will start; see below.
@@ -293,20 +293,32 @@ that's the point.
 
 ### Deploying
 
-Every pull request into main runs the tests, typecheck and lint, and every
-merge to main runs them again and then deploys itself
-([.github/workflows/deploy.yml](.github/workflows/deploy.yml)). The deploy
-job joins the tailnet as a throwaway node
-tagged `tag:ci`, and SSHes to the homelab with a key that can do exactly one
-thing: run [ops/deploy/deploy.sh](ops/deploy/deploy.sh) with the merged
-commit's SHA. That script checks the SHA is on `origin/main`, fast-forwards
-the checkout, builds the images, takes a backup, runs `prisma migrate deploy`,
-restarts the stack and checks it came up. If any step fails the job goes red
-and whatever was already running keeps running.
+Every pull request into main, and every merge to main, runs the tests,
+typecheck and lint ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+Merging does not deploy. A deploy happens when you publish a release:
 
-There is no automatic rollback. If a deploy breaks something after its
-migration ran, decide by hand between fixing forward and restoring the backup
-it just took (`npm run db:backup:list`, then see "Backups").
+```bash
+gh release create v1.4.0 --target main --generate-notes
+```
+
+or Releases, "Draft a new release" on GitHub, with a new `v*` tag on main.
+Mark it as a pre-release and it won't deploy. The release list then doubles
+as the record of what went live and when.
+
+[.github/workflows/deploy.yml](.github/workflows/deploy.yml) re-runs the
+checks on the tagged commit, joins the tailnet as a throwaway node tagged
+`tag:ci`, and SSHes to the homelab with a key that can do exactly one thing:
+run [ops/deploy/deploy.sh](ops/deploy/deploy.sh) with that commit's SHA. The
+script checks the SHA is on `origin/main`, fast-forwards the checkout, builds
+the images, takes a backup, runs `prisma migrate deploy`, restarts the stack
+and checks it came up. If any step fails the job goes red and whatever was
+already running keeps running.
+
+There is no automatic rollback, and the script refuses to go backwards: a
+release older than what the homelab is running fails rather than deploying.
+If a deploy breaks something after its migration ran, decide by hand between
+fixing forward with a new release and restoring the backup it just took
+(`npm run db:backup:list`, then see "Backups").
 
 One-time setup, on the homelab (Linux, with the repo already cloned and
 running as in "Full stack"):
@@ -331,7 +343,8 @@ running as in "Full stack"):
    OAuth client with the `auth_keys` write scope and the `tag:ci` tag.
 
 4. Create a GitHub environment called `production` (Settings, Environments),
-   set its deployment branches to `main` only, and give it:
+   limit its deployment branches and tags to the branch `main` and the tag
+   pattern `v*`, and give it:
 
    | Kind     | Name                 | Value                                                     |
    | -------- | -------------------- | --------------------------------------------------------- |
@@ -343,11 +356,13 @@ running as in "Full stack"):
    | Variable | `DEPLOY_USER`        | the user from step 2                                      |
 
 5. Protect main (Settings, Branches) so nothing lands on it without a PR,
-   and require the `verify` check to pass. Anything that reaches main now
-   runs on the homelab.
+   and require the CI `verify` check to pass. A release can only deploy a
+   commit already on main, so this is what stands between a PR and the
+   homelab.
 
-To re-run a deploy without a new commit, use "Run workflow" on the CI and
-deploy action, from main. To deploy by hand from the homelab itself:
+To re-run a deploy without cutting a release (after fixing a full disk, say),
+use "Run workflow" on the Deploy action, from main. That deploys the tip of
+main, not the latest release. To deploy by hand from the homelab itself:
 
 ```bash
 git fetch origin main && ops/deploy/deploy.sh "$(git rev-parse origin/main)"

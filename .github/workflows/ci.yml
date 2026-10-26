@@ -1,0 +1,59 @@
+# The checks: test, typecheck and lint, on every pull request and every merge
+# to main. Nothing here deploys, holds a secret or touches the homelab.
+#
+# deploy.yml calls this same file (workflow_call) before it deploys, so the
+# checks a PR passed and the checks that gate a release are one definition,
+# with no second copy to drift.
+
+name: CI
+
+on:
+  # `pull_request`, never `pull_request_target`. This one runs a fork's code
+  # with a read-only token and no secrets; the _target variant hands it the
+  # base repo's secrets.
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+
+# github.workflow is the caller's name when deploy.yml calls this, so a
+# release's checks never share a group with a PR's. A new push to a PR
+# cancels its own stale run; main and releases never cancel.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # The same three checks AGENTS.md asks for before a PR. Run on the PR,
+    # then again on main, because a merge can still combine two PRs that each
+    # passed alone.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Third-party actions are pinned to a commit, not a tag. Tags can be
+      # moved, and deploy.yml runs these same steps right before it uses a key
+      # into the homelab.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # Matches the node:24-alpine base in the Dockerfile.
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # src/generated/prisma is gitignored, and typecheck needs it. Generating
+      # never touches a database; the URL only has to parse.
+      - run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint

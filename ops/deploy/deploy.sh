@@ -62,6 +62,13 @@ main() {
   # --ff-only: if main on this host has wandered off from origin, stop rather
   # than invent a merge commit nobody reviewed.
   git merge --ff-only --quiet "$sha"
+  # If the checkout was already past $sha (an older release published after
+  # a newer one, or a `git pull` by hand), the merge above is a silent no-op
+  # and the newer code would be rebuilt under the older release's name. Going
+  # backwards is a rollback, and a rollback after a migration is a human's
+  # call; see the header.
+  [[ "$(git rev-parse HEAD)" == "$sha" ]] \
+    || fail "checkout is at $previous, which is newer than ${sha:0:7}; not rolling back"
   log "checked out ${sha:0:7} (was $previous)"
 
   log "building images"
