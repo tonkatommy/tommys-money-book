@@ -251,7 +251,9 @@ docker compose up -d --build
 nginx on :80 and :443, the Next.js app behind it, Postgres, the sync worker
 (no exposed port — it only talks to Postgres and Akahu) and the backup job.
 Only nginx listens on the LAN; the app and the db are bound to localhost.
-Migrations are never run automatically; apply them with `npm run db:migrate`.
+On the homelab, migrations are applied by each deploy, straight after a
+backup (see "Deploying" below). Anywhere else they are never
+run automatically; apply them with `npm run db:migrate`.
 
 nginx needs a certificate before it will start; see below.
 
@@ -288,6 +290,83 @@ The session cookie is marked `Secure` in production, so the built app only
 logs in over HTTPS (or on `localhost`, which browsers treat as secure).
 Plain `http://<host>:3000` from another machine won't keep you signed in;
 that's the point.
+
+### Deploying
+
+Every pull request into main, and every merge to main, runs the tests,
+typecheck and lint ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+Merging does not deploy. A deploy happens when you publish a release:
+
+```bash
+gh release create v1.4.0 --target main --generate-notes
+```
+
+or Releases, "Draft a new release" on GitHub, with a new `v*` tag on main.
+Mark it as a pre-release and it won't deploy. The release list then doubles
+as the record of what went live and when.
+
+[.github/workflows/deploy.yml](.github/workflows/deploy.yml) re-runs the
+checks on the tagged commit, joins the tailnet as a throwaway node tagged
+`tag:ci`, and SSHes to the homelab with a key that can do exactly one thing:
+run [ops/deploy/deploy.sh](ops/deploy/deploy.sh) with that commit's SHA. The
+script checks the SHA is on `origin/main`, fast-forwards the checkout, builds
+the images, takes a backup, runs `prisma migrate deploy`, restarts the stack
+and checks it came up. If any step fails the job goes red and whatever was
+already running keeps running.
+
+There is no automatic rollback, and the script refuses to go backwards: a
+release older than what the homelab is running fails rather than deploying.
+If a deploy breaks something after its migration ran, decide by hand between
+fixing forward with a new release and restoring the backup it just took
+(`npm run db:backup:list`, then see "Backups").
+
+One-time setup, on the homelab (Linux, with the repo already cloned and
+running as in "Full stack"):
+
+1. Generate a key used for nothing else. The private half goes to GitHub, so
+   create it anywhere and delete it afterwards:
+
+   ```bash
+   ssh-keygen -t ed25519 -N "" -C moneybook-deploy -f moneybook-deploy
+   ```
+
+2. Add the public half to `~/.ssh/authorized_keys` of the user that owns the
+   checkout (and is in the `docker` group), locked to the script. `restrict`
+   turns off port forwarding, agent forwarding and the terminal:
+
+   ```text
+   command="/path/to/tommys-money-book/ops/deploy/deploy.sh",restrict ssh-ed25519 AAAA... moneybook-deploy
+   ```
+
+3. In the Tailscale admin console, add `tag:ci` to `tagOwners` and an ACL
+   rule letting `tag:ci` reach the homelab on port 22 only. Then create an
+   OAuth client with the `auth_keys` write scope and the `tag:ci` tag.
+
+4. Create a GitHub environment called `production` (Settings, Environments),
+   limit its deployment branches and tags to the branch `main` and the tag
+   pattern `v*`, and give it:
+
+   | Kind     | Name                 | Value                                                     |
+   | -------- | -------------------- | --------------------------------------------------------- |
+   | Secret   | `TS_OAUTH_CLIENT_ID` | from step 3                                               |
+   | Secret   | `TS_OAUTH_SECRET`    | from step 3                                               |
+   | Secret   | `DEPLOY_SSH_KEY`     | the private key from step 1                               |
+   | Secret   | `DEPLOY_KNOWN_HOSTS` | output of `ssh-keyscan <host>.<tailnet>.ts.net`, run once |
+   | Variable | `DEPLOY_HOST`        | `<host>.<tailnet>.ts.net`                                 |
+   | Variable | `DEPLOY_USER`        | the user from step 2                                      |
+
+5. Protect main (Settings, Branches) so nothing lands on it without a PR,
+   and require the CI `verify` check to pass. A release can only deploy a
+   commit already on main, so this is what stands between a PR and the
+   homelab.
+
+To re-run a deploy without cutting a release (after fixing a full disk, say),
+use "Run workflow" on the Deploy action, from main. That deploys the tip of
+main, not the latest release. To deploy by hand from the homelab itself:
+
+```bash
+git fetch origin main && ops/deploy/deploy.sh "$(git rev-parse origin/main)"
+```
 
 ## User guide
 
@@ -728,6 +807,9 @@ command but not a dead disk. Point it at a NAS bind mount to fix that.
 - LAN-only binding, remote access via Tailscale, HTTPS even on the local network
   (nginx terminates TLS; the app itself is bound to localhost)
 - Nightly database backups on a separate volume, restore-tested weekly
+- Deploys reach the homelab over Tailscale with an SSH key that can only run
+  the deploy script, and only for commits already on main; no self-hosted
+  runner, so a fork's pull request has no route onto the box
 
 ## Status
 

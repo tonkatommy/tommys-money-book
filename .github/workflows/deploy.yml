@@ -1,0 +1,93 @@
+# Deploy to the homelab, when asked to. Merging to main does not deploy.
+#
+# Two ways to ask:
+#   - publish a GitHub Release whose tag points at a commit on main (the
+#     normal way: the release list is then a record of what went live, when,
+#     and why)
+#   - "Run workflow" on main in the Actions tab (re-run after fixing something
+#     on the host, a full disk or a lapsed cert, without cutting a release)
+# Pre-releases are skipped, so a tag can be published for testing or notes
+# without going anywhere near the homelab.
+#
+# The homelab is LAN/Tailscale only, so a GitHub-hosted runner joins the
+# tailnet as an ephemeral, tagged node and SSHes in. The SSH key is locked by
+# `command=` in authorized_keys to ops/deploy/deploy.sh, so all this workflow
+# can ever do on the host is ask for one commit to be deployed. What deploying
+# means (backup, migrate, restart, health check) lives in that script, on the
+# host, where it can be read next to the compose file it drives.
+#
+# A self-hosted runner would be simpler to wire up, and is exactly what GitHub
+# advises against for a public repo: a fork's pull request could try to run
+# its own code on the box that holds the bank feed.
+
+name: Deploy
+run-name: Deploy ${{ github.event.release.tag_name || format('main @ {0}', github.sha) }}
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# Two deploys must never run over each other. Queue rather than cancel:
+# cancelling mid-migration is worse than waiting.
+concurrency:
+  group: deploy-homelab
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # The release's own commit is checked again even though it passed CI as a
+  # PR and on main: a tag can point at any commit, not just the tip that CI
+  # last saw. Same file as ci.yml, so the checks cannot drift.
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: verify
+    # A dispatch from a branch other than main, or a pre-release, stops here.
+    # deploy.sh would refuse a SHA that isn't on main anyway; this saves
+    # tunnelling into the homelab just to be told no.
+    if: >-
+      (github.event_name == 'release' && !github.event.release.prerelease) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Secrets live on the environment rather than the repo, so nothing but a
+    # job that names it can read them. Its deployment rules allow main and
+    # v* tags only (see README, "Deploying").
+    environment: production
+    steps:
+      - name: Join the tailnet
+        # Pinned to a commit, not a tag: a moved tag here would run someone
+        # else's code with a key into the homelab.
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          # The ACL grants tag:ci port 22 on the homelab and nothing else.
+          tags: tag:ci
+          ping: ${{ vars.DEPLOY_HOST }}
+
+      - name: Deploy ${{ github.event.release.tag_name || github.sha }}
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+          # StrictHostKeyChecking=yes: an unknown or changed host key fails
+          # the job instead of being trusted on first use. The command string
+          # is just the SHA (for a release, the tagged commit); the forced
+          # command on the host ignores anything else and validates this.
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes \
+            -o ServerAliveInterval=30 \
+            "$DEPLOY_USER@$DEPLOY_HOST" "$GITHUB_SHA"
