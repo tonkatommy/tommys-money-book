@@ -1017,3 +1017,494 @@ p {
   background: rgba(255, 255, 255, 0.02);
   color: inherit;
 }
+
+/* ==========================================================================
+   Guide (/guide)
+
+   The step list, the example frame and the pager. Here rather than inline
+   because they need hover, focus and data-state selectors, which inline
+   styles cannot express without making the step list a client component.
+   ========================================================================== */
+
+.mb-guide {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+  align-items: start;
+  max-width: 1120px;
+}
+
+/* The step list only gets its own column from 1100px. Between 768 and that,
+   the app sidebar is already taking 220px, and a second column of steps
+   leaves the step itself a strip a few words wide. */
+.mb-guide-aside {
+  display: none;
+}
+
+@media (min-width: 1100px) {
+  .mb-guide {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+  /* Sticky under the app header, so the list stays in reach on long steps. */
+  .mb-guide-aside {
+    display: block;
+    position: sticky;
+    top: 96px;
+  }
+}
+
+.mb-guide-aside-head {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  margin-bottom: var(--space-3);
+  padding: 0 10px;
+}
+
+.mb-guide-list,
+.mb-guide-list ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mb-guide-list > li + li {
+  margin-top: var(--space-4);
+}
+
+.mb-guide-group {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-weight: var(--weight-semibold);
+  padding: 0 10px;
+  margin-bottom: 4px;
+}
+
+.mb-guide-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  transition: background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.mb-guide-item:hover {
+  background: var(--surface-card-raised);
+  color: var(--text-primary);
+}
+
+.mb-guide-item:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.mb-guide-item[data-state="current"] {
+  background: var(--surface-card-raised);
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+  box-shadow: inset 2px 0 0 var(--amber-400);
+}
+
+.mb-guide-num {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  background: var(--surface-inset);
+}
+
+.mb-guide-item[data-state="done"] .mb-guide-num {
+  border-color: var(--status-ok-border);
+  background: var(--status-ok-bg);
+  color: var(--status-ok);
+}
+
+.mb-guide-item[data-state="current"] .mb-guide-num {
+  border-color: transparent;
+  background: var(--accent-gradient);
+  color: var(--text-on-accent);
+  font-weight: var(--weight-bold);
+}
+
+/* Narrow: ‹ [All steps] › above the step, so stepping doesn't mean
+   scrolling to the pager at the bottom of a long step first. */
+.mb-guide-topbar {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  gap: var(--space-2);
+  align-items: start;
+}
+
+/* Hidden at the same width the step-list column appears. Not
+   .mb-narrow-only, which switches at 768px and whose display: block would
+   lose the grid anyway. */
+@media (min-width: 1100px) {
+  .mb-guide-topbar {
+    display: none;
+  }
+}
+
+.mb-guide-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 46px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: var(--text-lg);
+}
+
+.mb-guide-arrow[aria-disabled="true"] {
+  opacity: 0.35;
+}
+
+.mb-guide-arrow-next {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--text-on-accent);
+}
+
+.mb-guide-arrow-next:hover {
+  color: var(--text-on-accent);
+}
+
+.mb-guide-drawer {
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 0 var(--space-3);
+}
+
+.mb-guide-drawer > summary {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  list-style: none;
+}
+
+.mb-guide-drawer > summary > :first-child {
+  flex: 1;
+}
+
+.mb-guide-drawer > summary::-webkit-details-marker {
+  display: none;
+}
+
+.mb-guide-drawer > summary::after {
+  content: "▾";
+  margin-left: var(--space-2);
+  color: var(--text-muted);
+}
+
+.mb-guide-drawer[open] > summary::after {
+  content: "▴";
+}
+
+.mb-guide-drawer[open] {
+  padding-bottom: var(--space-3);
+}
+
+.mb-guide-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.mb-guide-eyebrow {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.mb-guide-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.mb-guide-lede {
+  margin: 6px 0 0;
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  max-width: 640px;
+}
+
+.mb-guide-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (min-width: 1100px) {
+  .mb-guide-split {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
+}
+
+.mb-guide-prose {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.65;
+  max-width: 640px;
+}
+
+.mb-guide-prose > :first-child {
+  margin-top: 0;
+}
+
+.mb-guide-prose > :last-child {
+  margin-bottom: 0;
+}
+
+.mb-guide-prose p,
+.mb-guide-prose ul {
+  margin: 0 0 var(--space-3);
+}
+
+/* Tailwind's preflight strips list markers; prose lists want them back. */
+.mb-guide-prose ul {
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.mb-guide-prose li::marker {
+  color: var(--amber-400);
+}
+
+.mb-guide-prose li + li {
+  margin-top: 6px;
+}
+
+.mb-guide-prose strong {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.mb-guide-prose code,
+.mb-guide-example code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.mb-guide-terms {
+  margin: 0 0 var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.mb-guide-term {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+}
+
+.mb-guide-term dt {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+  margin-bottom: 2px;
+}
+
+.mb-guide-term dd {
+  margin: 0;
+}
+
+/* Dashed, labelled and a shade off the card, so an example is never read as
+   a live panel. */
+.mb-guide-example {
+  margin: 0;
+  position: relative;
+  padding: var(--space-6) var(--space-5) var(--space-5);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-inset);
+  min-width: 0;
+}
+
+.mb-guide-example-tag {
+  position: absolute;
+  top: -9px;
+  left: 14px;
+  padding: 0 8px;
+  font-size: 10px;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  background: var(--surface-card);
+  border-radius: var(--radius-full);
+}
+
+.mb-guide-example figcaption {
+  margin-top: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+/* Wraps rather than squeezes: on a phone the figure drops under the label
+   instead of crushing it to two words a line. */
+.mb-guide-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 11px 0;
+}
+
+.mb-guide-row > :first-child {
+  flex: 1 1 170px;
+}
+
+.mb-guide-row + .mb-guide-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.mb-guide-navmap {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-xs);
+}
+
+.mb-guide-navmap-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 0;
+}
+
+.mb-guide-navmap-row + .mb-guide-navmap-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.mb-guide-why {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--status-neutral-border);
+  background: var(--status-neutral-bg);
+  padding: 0 var(--space-4);
+}
+
+.mb-guide-why > summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.mb-guide-why[open] {
+  padding-bottom: var(--space-4);
+}
+
+.mb-guide-try {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.mb-guide-pager {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.mb-guide-pager > :last-child {
+  justify-self: end;
+}
+
+.mb-guide-pager-link {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card-raised);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.mb-guide-pager-link:hover {
+  color: var(--text-primary);
+  border-color: var(--amber-400);
+}
+
+.mb-guide-pager-link:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.mb-guide-pager-next {
+  text-align: right;
+  align-items: flex-end;
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--text-on-accent);
+  font-weight: var(--weight-semibold);
+}
+
+.mb-guide-pager-next:hover {
+  color: var(--text-on-accent);
+  border-color: transparent;
+  filter: brightness(1.08);
+}
+
+.mb-guide-kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  border-bottom-width: 2px;
+  background: var(--surface-inset);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.mb-guide-pager-dir {
+  font-size: var(--text-xs);
+  opacity: 0.75;
+}

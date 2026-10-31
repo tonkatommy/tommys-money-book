@@ -43,9 +43,16 @@ export function FirstRun({ view }: { view: BudgetView }) {
           title="Not enough history to suggest a budget yet"
           sub="Once a few periods of transactions have synced and been categorised, this screen will suggest a budget from what you actually spend. You can still set one by hand now."
         />
-        <ButtonLink href={withBook("/budget/setup", book)} variant="primary">
-          Set a budget by hand
-        </ButtonLink>
+        <div className="mb-head-actions">
+          <ButtonLink href={withBook("/budget/setup", book)} variant="primary">
+            Set a budget by hand
+          </ButtonLink>
+          {/* First run is when a tour is most wanted, and on a phone this
+              screen replaces the overview that carries the usual link. */}
+          <Link href={withBook("/guide", book)} style={{ fontSize: "var(--text-sm)" }}>
+            New here? How to use this app
+          </Link>
+        </div>
       </Card>
     );
   }
@@ -55,7 +62,15 @@ export function FirstRun({ view }: { view: BudgetView }) {
       <ScreenHead
         title="You have enough history to budget"
         sub={`${SUGGESTION_PERIODS} pay periods have synced and been categorised. Every figure below is your own average — nothing here is a template.`}
-        right={<Badge tone="ok">{suggested.length} categories with history</Badge>}
+        right={
+          <>
+            <Badge tone="ok">{suggested.length} categories with history</Badge>
+            {/* See the note on the no-history branch above. */}
+            <Link href={withBook("/guide", book)} style={{ fontSize: "var(--text-sm)" }}>
+              New here? How to use this app
+            </Link>
+          </>
+        }
       />
 
       <div className="mb-hero">

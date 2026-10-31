@@ -479,6 +479,14 @@ export default async function BudgetPage({
                   Savings goals
                 </Link>
               )}
+              {/* The guide's only way in on a phone: the sidebar link that
+                  carries it on wide screens is hidden below 768px. */}
+              <Link
+                href={withBook("/guide", book)}
+                style={{ fontSize: "var(--text-sm)" }}
+              >
+                How to use this app
+              </Link>
             </div>
           </Card>
         </div>

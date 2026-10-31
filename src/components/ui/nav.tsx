@@ -90,6 +90,27 @@ export function SideNav({ active, book }: { active: string; book: Book }) {
           </Link>
         );
       })}
+      {/* Pinned to the foot of the sidebar rather than in NAV: it's for
+          learning the app, not using it, and NAV also feeds the tab bar,
+          where seven items already share the width. Phones reach it from
+          the bottom of Budget. */}
+      <Link
+        href={withBook("/guide", book)}
+        aria-current={active === "guide" ? "page" : undefined}
+        style={{
+          marginTop: "auto",
+          padding: "9px 12px",
+          borderRadius: "var(--radius-md)",
+          border: "1px solid var(--border-subtle)",
+          fontSize: "var(--text-xs)",
+          fontWeight: "var(--weight-medium)",
+          textDecoration: "none",
+          color: active === "guide" ? "var(--text-primary)" : "var(--text-tertiary)",
+          background: active === "guide" ? "var(--surface-card-raised)" : "transparent",
+        }}
+      >
+        How to use this app
+      </Link>
     </nav>
   );
 }
