@@ -458,6 +458,12 @@ Two screens have no menu item. They're linked from the Budget screen instead:
 **How past periods went** (`/budget/history`) and **Savings goals**
 (`/goals`).
 
+New to the app? **How to use this app** (`/guide`) is a 14-step clickable
+tour of everything below, with an example of each screen built from made-up
+figures. It's at the foot of the sidebar on a desktop and at the bottom of
+Budget on a phone. Each step is its own address (`/guide?step=transfers`), so
+it works without JavaScript and any step can be bookmarked.
+
 The header on every screen shows:
 
 - **Pay period**: the current period, say "20 Sep – 19 Oct", and the days
