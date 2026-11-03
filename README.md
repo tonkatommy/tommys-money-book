@@ -407,7 +407,7 @@ this section covers everything after that.
 
 | You might expect to… | What actually happens |
 | --- | --- |
-| Start a sync from the browser | The **Sync** button opens the status page. It doesn't fetch anything. Syncs run on the worker's schedule, or from the command line (see [Run a sync right now](#run-a-sync-right-now)). |
+| Start a sync from the browser | The sync dot in the header opens the status page. It doesn't fetch anything. Syncs run on the worker's schedule, or from the command line (see [Run a sync right now](#run-a-sync-right-now)). |
 | Edit a bank transaction's date, amount or description | You can't. Those are the bank's record. You can change the category and add notes. Only cash entries you typed yourself are fully editable. |
 | Delete a transaction | There is no delete, for bank rows or cash entries. |
 | Split one transaction across two categories | Not supported. One transaction, one category. |
@@ -420,7 +420,7 @@ this section covers everything after that.
 | Set a savings goal on the business book, or one goal across several accounts | Goals are personal only, one account each, and one active goal per account. |
 | File the IR3, run a GST return, or get tax advice | It prepares the figures and lists the open questions. Filing, and the judgement calls, stay with you and your accountant. |
 | Reach it from the internet, or give someone their own login | It's single user and LAN/Tailscale only, with one shared password. |
-| Use a light theme | There is only a dark theme. |
+| Switch between light and dark in the app | The theme follows your phone or computer's own light/dark setting. |
 
 ### Getting in
 
@@ -442,26 +442,28 @@ If the login page says "Login is unavailable. Check server logs.",
 ### Finding your way around
 
 On a desktop the menu is a sidebar on the left. Below 768px wide it becomes a
-tab bar along the bottom, with shorter labels:
+tab bar along the bottom with four tabs and a **More** menu for the rest:
 
 | Sidebar | Tab bar | Goes to | For |
 | --- | --- | --- | --- |
 | Budget | Budget | `/budget` | The home screen: am I alright this pay period? |
-| Transactions | Txns | `/transactions` | Every transaction, filters, categorising, cash entries |
-| Transfers | Pairs | `/transfers` | Moves between your own accounts, waiting to be confirmed |
-| Reports | Reports | `/reports` | Financial-year figures, GST monitor, IR3 pack |
-| Set budget | Set up | `/budget/setup` | Budget amounts, fixed bills, payday |
-| Month end | Close | `/budget/review` | Close last period and set this one |
-| Sync status | Sync | `/sync` | Is the bank feed still arriving? |
+| ↳ How past periods went | More | `/budget/history` | The last six complete pay periods against budget |
+| ↳ Savings goals | More | `/goals` | Savings accounts against their targets |
+| Transactions | Spending | `/transactions` | Every transaction, filters, categorising, cash entries |
+| Transfers | Transfers | `/transfers` | Moves between your own accounts, waiting to be confirmed |
+| Reports | Reports | `/reports` | Financial-year figures, GST monitor |
+| ↳ IR3 tax pack | More | `/reports/ir3` | The tax return figures, both books |
+| Set budget | More | `/budget/setup` | Budget amounts, fixed bills, payday |
+| Month end | More | `/budget/review` | Close last period and set this one |
+| Sync status | More | `/sync` | Is the bank feed still arriving? |
 
-Two screens have no menu item. They're linked from the Budget screen instead:
-**How past periods went** (`/budget/history`) and **Savings goals**
-(`/goals`).
+Transactions and Spending carry a count of this period's transactions that
+need a category.
 
 New to the app? **How to use this app** (`/guide`) is a 14-step clickable
 tour of everything below, with an example of each screen built from made-up
-figures. It's at the foot of the sidebar on a desktop and at the bottom of
-Budget on a phone. Each step is its own address (`/guide?step=transfers`), so
+figures. It's at the foot of the sidebar on a desktop, and under More and at
+the bottom of Budget on a phone. Each step is its own address (`/guide?step=transfers`), so
 it works without JavaScript and any step can be bookmarked.
 
 The header on every screen shows:
@@ -472,9 +474,12 @@ The header on every screen shows:
   screen. The choice lives in the address (`?book=BUSINESS`), so you can
   bookmark a business view and the back button works as expected. A few
   screens have a fixed book and show a plain label instead: a category's
-  detail page, savings goals (personal only) and the IR3 pack (both books at
-  once).
-- **Sync** (desktop only) and **Sign out**.
+  detail page, savings goals (personal only), and Transfers and the IR3 pack
+  (both books at once).
+- **The sync dot**: green with the time of the last successful sync, an amber
+  ring when a sync is overdue, a red diamond when the latest run failed. It
+  links to Sync status.
+- **Sign out**, at every width.
 
 ### Words this app uses
 

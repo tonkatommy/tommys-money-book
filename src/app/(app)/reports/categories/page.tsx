@@ -1,32 +1,34 @@
 // Reports: where the money went, ranked, for one financial year.
 //
 // The plan named Recharts for this screen. It is a ranked bar *table* instead:
-// labels, amounts, shares and server-rendered bars, for the reason §6 of the
-// 3c spec gives — a chart library would be the first client JavaScript in the
-// app, bought for a picture, on the one screen whose entire value is the
-// numbers themselves.
+// ranks, labels, shares, amounts and server-rendered bars, for the reason §6
+// of the 3c spec gives — a chart library would be client JavaScript bought
+// for a picture, on the one screen whose entire value is the numbers.
 //
 // Income and expenses are two separate rankings rather than one list. They are
 // different questions, and a salary and a phone bill sharing a bar scale is a
 // screen with one visible bar.
 //
-// A pure server component, like every screen in this section. No mutations, so
-// no Server Actions and no forms: the book toggle and the year selector are
-// links, and the whole screen works with JavaScript disabled.
+// Side by side from 768px, as the Money Book canvas (ByCat.dc.html) draws
+// them; stacked below. The two lists are uneven (around 8 income categories
+// against 34 expense ones), so the income column ends early on a desktop; that
+// is the accepted cost of seeing both totals at once. The phone overflow that
+// once forced a single column came from a `1fr` track's min-content floor
+// meeting a nowrap label; `.grid` columns are `minmax(0, 1fr)`, which has no
+// such floor.
+//
+// A pure server component. No mutations, so no Server Actions and no forms.
 
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { Card, EmptyState } from "@/components/ui/primitives";
-import { Figure, KV, RankedBars, ScreenHead } from "@/components/ui/data";
+import { EmptyState, Icon } from "@/components/ui/primitives";
+import { RankedBars } from "@/components/ui/data";
 import { withBook } from "@/components/ui/nav";
 import { formatNZD } from "@/lib/money";
 import { parseBook, resolvePeriod } from "@/lib/budget/query";
 import { parseFY, rangeQuery, selectableFYs } from "@/lib/reports/fy";
-import {
-  getCategoryBreakdown,
-  type CategoryTotal,
-} from "@/lib/reports/query";
-import { FyLinks, QualityAlerts, ReportLinks } from "../parts";
+import { getCategoryBreakdown, type CategoryTotal } from "@/lib/reports/query";
+import { FyChip, FyLinks, QualityAlerts, ReportLinks } from "../parts";
 
 export const dynamic = "force-dynamic";
 
@@ -48,14 +50,13 @@ export default async function ReportCategoriesPage({
   const fy = parseFY(params.fy, now);
 
   // The shell header shows the pay period, which this screen does not use. It
-  // stays labelled "Pay period" precisely so the two date regimes never read
-  // as the same thing. It shares this render's instant so the header cannot
-  // roll over to the next period while the figures below stay in the previous
-  // one.
+  // shares this render's instant so the header cannot roll over to the next
+  // period while the figures below stay in the previous one.
   const { period, settings } = await resolvePeriod(undefined, now);
   const view = await getCategoryBreakdown(book, fy, now);
 
   const years = selectableFYs(now);
+  const bookName = book === "BUSINESS" ? "Business book" : "Personal book";
 
   // Every drilldown lands on the transaction list at THIS range, not at the
   // pay period it would otherwise default to. A total for one window opening
@@ -67,13 +68,8 @@ export default async function ReportCategoriesPage({
       key: total.categoryId,
       label: total.name,
       cents: total.totalCents,
-      href: withBook(
-        `/transactions?category=${total.categoryId}&${range}`,
-        book,
-      ),
-      note: `${total.transactions} transaction${
-        total.transactions === 1 ? "" : "s"
-      }`,
+      href: withBook(`/transactions?category=${total.categoryId}&${range}`, book),
+      note: `${total.transactions} transaction${total.transactions === 1 ? "" : "s"}`,
     }));
 
   return (
@@ -85,165 +81,101 @@ export default async function ReportCategoriesPage({
       preserveQuery={params.fy ? `fy=${fy.year}` : undefined}
       splitFortnightly={settings.splitFortnightly}
     >
-      <div className="mb-stack">
-        <ScreenHead
-          title="By category"
-          sub={
-            <>
-              Every income and expense category for{" "}
-              <strong>{view.rangeLabel}</strong>. Transfers between your own
-              accounts are not here, and never were — they are neither income
-              nor spending.
-            </>
-          }
-          right={
-            <FyLinks
-              years={years}
-              current={fy}
-              book={book}
-              basePath="/reports/categories"
-            />
-          }
-        />
+      <QualityAlerts quality={view.quality} book={book} fy={fy} rangeEnd={view.rangeEnd} />
 
+      <div className="page-h">
+        <div className="grow stack" style={{ gap: 6 }}>
+          <h1 className="t-xl">By category</h1>
+          <span className="t-s ink2">
+            {bookName} · income and expenses ranked separately. Transfers between
+            your own accounts are neither, so they&apos;re in neither list.
+          </span>
+        </div>
+        <FyLinks years={years} current={fy} book={book} basePath="/reports/categories" />
+      </div>
+      <div className="row wrap" style={{ gap: 12 }}>
         <ReportLinks book={book} fy={fy} active="categories" />
+        <FyChip fy={fy} rangeEnd={view.rangeEnd} />
+      </div>
 
-        <QualityAlerts
-          quality={view.quality}
-          book={book}
-          fy={fy}
-          rangeEnd={view.rangeEnd}
-        />
-
-        <Card
-          title={`${fy.label} totals`}
-          action={
-            <span
-              className="mb-num"
-              style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
-            >
-              {view.rangeLabel}
+      <div className="grid cols-2" style={{ gap: 20, alignItems: "start" }}>
+        <section className="txl" aria-label="Income">
+          <div className="grp-h">
+            <span className="dirl in">
+              <Icon name="in" size="sm" />
+              Money in · {view.income.length} categor{view.income.length === 1 ? "y" : "ies"}
             </span>
-          }
-        >
-          <div className="mb-grid-tight">
-            <Figure
-              label="Money in"
-              value={formatNZD(view.incomeCents)}
-              tone="var(--money-in)"
-              note={`${view.income.length} income categor${
-                view.income.length === 1 ? "y" : "ies"
-              }`}
-            />
-            <Figure
-              label="Money out"
-              value={formatNZD(view.expensesCents)}
-              tone="var(--money-out)"
-              note={`${view.expenses.length} expense categor${
-                view.expenses.length === 1 ? "y" : "ies"
-              }`}
-            />
+            <span className="m in">+{formatNZD(view.incomeCents)}</span>
           </div>
-
-          <div
-            style={{
-              marginTop: "var(--space-5)",
-              paddingTop: "var(--space-4)",
-              borderTop: "1px solid var(--border-subtle)",
-            }}
-          >
-            <KV
-              label={`Net for ${fy.label}`}
-              value={formatNZD(view.netCents)}
-              tone={
-                view.netCents >= 0 ? "var(--money-in)" : "var(--status-error)"
-              }
-            />
-          </div>
-        </Card>
-
-        {/* Two cards, two RankedBars, two independent scales. Each side's
-            bars are scaled against its own largest row, and each percentage
-            is a share of its own side — mixing them would make every expense
-            a hairline next to a year of salary.
-
-            Stacked, not side by side, for two reasons found on the device.
-            The sides are wildly uneven — 8 income categories against 34
-            expense ones — so columns leave two screenfuls of dead space
-            beside the shorter list. And a `1fr` grid track is
-            `minmax(auto, 1fr)`, whose floor is the item's min-content; a
-            category label is `white-space: nowrap` so it can ellipsize, which
-            makes its min-content contribution the FULL label text. At 375px
-            that forced the track to 385px inside a 339px container and
-            scrolled the whole page sideways. Full-width rows also give a name
-            like "Investment & KiwiSaver Withdrawals" somewhere to go. */}
-        <div className="mb-stack">
-          <Card
-            title="Money in"
-            action={
-              <span
-                style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
-              >
-                largest first
-              </span>
-            }
-          >
-            <RankedBars
-              rows={rows(view.income)}
-              tone="var(--money-in)"
-              empty={
+          <RankedBars
+            rows={rows(view.income)}
+            income
+            empty={
+              <div style={{ padding: 16 }}>
                 <EmptyState
-                  compactPad
-                  icon="↓"
+                  icon="in"
                   title="No income in this year"
-                  body="Nothing in this book has been categorised as income for this range. If that is a surprise, it is usually the review queue rather than the year."
+                  body="Nothing in this book has been categorised as income for this range. If that's a surprise, it's usually the review queue rather than the year."
                 />
-              }
-            />
-          </Card>
-
-          <Card
-            title="Money out"
-            action={
-              <span
-                style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
-              >
-                largest first
-              </span>
+              </div>
             }
-          >
-            <RankedBars
-              rows={rows(view.expenses)}
-              tone="var(--money-out)"
-              empty={
+          />
+          {view.income.length > 0 && (
+            <div className="rk tot">
+              <span className="no" />
+              <span className="n">Total</span>
+              <span />
+              <span className="p">100%</span>
+              <span className="a m in">+{formatNZD(view.incomeCents)}</span>
+            </div>
+          )}
+        </section>
+
+        <section className="txl" aria-label="Expenses">
+          <div className="grp-h">
+            <span className="dirl out">
+              <Icon name="out" size="sm" />
+              Money out · {view.expenses.length} categor{view.expenses.length === 1 ? "y" : "ies"}
+            </span>
+            <span className="m">{formatNZD(view.expensesCents)}</span>
+          </div>
+          <RankedBars
+            rows={rows(view.expenses)}
+            empty={
+              <div style={{ padding: 16 }}>
                 <EmptyState
-                  compactPad
-                  icon="↑"
+                  icon="out"
                   title="No spending in this year"
                   body="Nothing in this book has been categorised as an expense for this range."
                 />
-              }
-            />
-          </Card>
-        </div>
-
-        <p
-          style={{
-            margin: 0,
-            fontSize: "var(--text-xs)",
-            color: "var(--text-tertiary)",
-            fontFamily: "var(--font-sans)",
-          }}
-        >
-          Bars are scaled against the largest category on their own side, so
-          the two halves of this screen are not comparable to each other. The
-          percentages are each category&apos;s share of its own side.{" "}
-          <Link href={withBook(`/reports/months?fy=${fy.year}`, book)}>
-            See the same money month by month
-          </Link>
-          .
-        </p>
+              </div>
+            }
+          />
+          {view.expenses.length > 0 && (
+            <div className="rk tot">
+              <span className="no" />
+              <span className="n">Total</span>
+              <span />
+              <span className="p">100%</span>
+              <span className="a m">{formatNZD(view.expensesCents)}</span>
+            </div>
+          )}
+        </section>
       </div>
+
+      <p className="t-xs ink3">
+        Shares are of each side&apos;s own total, so income and expenses never mix,
+        and bars are scaled to the largest row on each side. Shares are rounded, so
+        a column can add to 99% or 101%. Net for {fy.label}:{" "}
+        <span className="num">
+          {view.netCents >= 0 ? "+" : "−"}
+          {formatNZD(Math.abs(view.netCents))}
+        </span>
+        .{" "}
+        <Link href={withBook(`/reports/months?fy=${fy.year}`, book)}>
+          See the same money month by month
+        </Link>
+      </p>
     </AppShell>
   );
 }

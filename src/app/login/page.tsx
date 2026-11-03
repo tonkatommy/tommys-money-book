@@ -1,7 +1,10 @@
 // The only route proxy.ts lets through unauthenticated (design spec §2).
+//
+// Layout follows the Money Book canvas (Login.dc.html). It says nothing
+// about the data — no "last synced" line — because nothing on this page may
+// read the database before the visitor has signed in.
 
 import { sanitizeNextPath } from "@/lib/auth/next-path";
-import { Card } from "@/components/ui/primitives";
 import { LoginForm } from "./login-form";
 
 export default async function LoginPage({
@@ -13,43 +16,29 @@ export default async function LoginPage({
   const next = sanitizeNextPath(params.next);
 
   return (
-    <main
+    <div
       style={{
         minHeight: "100vh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "24px 18px",
+        padding: 24,
       }}
     >
-      <div style={{ width: "100%", maxWidth: 380 }}>
-        <div style={{ marginBottom: "var(--space-6)" }}>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "var(--text-xl)",
-              fontWeight: "var(--weight-bold)",
-              letterSpacing: "var(--tracking-tight)",
-              color: "var(--text-primary)",
-            }}
-          >
-            Tommy&rsquo;s Money Book
-          </h1>
-          <p
-            style={{
-              margin: "4px 0 0",
-              fontSize: "var(--text-sm)",
-              color: "var(--text-tertiary)",
-            }}
-          >
-            Homelab · one password, one user.
-          </p>
+      <main className="stack" style={{ width: "100%", maxWidth: 400, gap: 28 }}>
+        <div className="stack" style={{ gap: 14, alignItems: "flex-start" }}>
+          <span className="logo" style={{ fontSize: 24 }}>
+            <span className="mk" style={{ width: 44, height: 44 }} aria-hidden="true" />
+            Money Book
+          </span>
+          <p className="t-b ink2">Your two books, kept separately.</p>
         </div>
-
-        <Card>
-          <LoginForm next={next} />
-        </Card>
-      </div>
-    </main>
+        <LoginForm next={next} />
+        <p className="t-xs ink3">
+          Self-hosted · single user · forgotten it? It&apos;s APP_PASSWORD in the
+          server environment.
+        </p>
+      </main>
+    </div>
   );
 }

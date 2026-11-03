@@ -1,162 +1,85 @@
-// Data-display components from the design system: the budget bar and the
-// single on-track verdict. Both take integer cents, like everything else that
-// touches money in this codebase.
+// Data-display components: the pace bar, the pace verdict, figures and the
+// bar lists. All take integer cents, like everything else that touches money
+// in this codebase, and render design.css classes.
 
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { formatNZD } from "@/lib/money";
 
-type PaceTone = "accent" | "ok" | "warning" | "error";
-
-const fills: Record<PaceTone, string> = {
-  accent: "var(--accent-gradient)",
-  ok: "var(--status-ok)",
-  warning: "var(--status-warning)",
-  error: "var(--status-error)",
-};
+const clampPct = (n: number) => Math.min(100, Math.max(0, n));
 
 /**
- * A budget bar with an optional "where you should be today" marker.
+ * A budget bar with an optional "where you'd be with even spending" marker.
  *
  * The marker is the whole point. A bar at 60% means nothing on its own — 60%
- * on day 6 of a month is a problem and 60% on day 27 is not. The marker is
- * how far through the period you are, so the comparison is visual and
- * immediate rather than arithmetic the reader has to do.
+ * on day 6 of a month is a problem and 60% on day 27 is not.
+ *
+ * Spending past the marker is drawn hatched rather than recoloured, so being
+ * behind pace reads by pattern as well as by colour: solid fill up to where
+ * you should be, hatching for what you've spent beyond it.
+ *
+ * A zero budget gets the dashed "not budgeted" track, not an empty bar: no
+ * budget is not the same as a budget with nothing spent.
  */
 export function PaceBar({
   spentCents,
   budgetCents,
   markerPct = null,
-  height = 8,
-  tone,
+  thick = false,
 }: {
   spentCents: number;
   budgetCents: number;
   markerPct?: number | null;
+  thick?: boolean;
+  /** Kept for callers; the design has two heights, chosen by `thick`. */
   height?: number;
-  tone?: PaceTone;
+  tone?: string;
 }) {
-  const pct =
-    budgetCents > 0
-      ? Math.min(100, Math.max(0, (spentCents / budgetCents) * 100))
-      : 0;
-  const over = budgetCents > 0 && spentCents > budgetCents;
+  if (budgetCents <= 0) return <div className="pace unb" aria-hidden="true" />;
 
-  // Warning only once spending is meaningfully past the marker, not the
-  // instant it crosses — a bar that flickers amber every other day is noise.
-  const resolved: PaceTone =
-    tone ??
-    (over
-      ? "error"
-      : markerPct != null && pct > markerPct + 4
-        ? "warning"
-        : "accent");
+  const pct = clampPct((spentCents / budgetCents) * 100);
+  const mark = markerPct == null ? null : clampPct(markerPct);
+  const solid = mark == null ? pct : Math.min(pct, mark);
+  const over = mark != null && pct > mark ? pct - mark : 0;
 
   return (
-    <div style={{ position: "relative" }}>
-      <div
-        style={{
-          height,
-          borderRadius: "var(--radius-full)",
-          background: "var(--surface-inset)",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            width: `${pct}%`,
-            background: fills[resolved],
-            borderRadius: "var(--radius-full)",
-          }}
-        />
-      </div>
-      {markerPct != null && (
-        <div
-          title="Where you should be today"
-          style={{
-            position: "absolute",
-            top: -3,
-            left: `calc(${Math.min(100, Math.max(0, markerPct))}% - 1px)`,
-            width: 2,
-            height: height + 6,
-            background: "var(--text-secondary)",
-            borderRadius: 2,
-            opacity: 0.85,
-          }}
-        />
-      )}
+    <div className={thick ? "pace thick" : "pace"} aria-hidden="true">
+      <div className="fill" style={{ width: `${solid}%` }} />
+      {over > 0 && <div className="over" style={{ left: `${mark}%`, width: `${over}%` }} />}
+      {mark != null && <div className="mark" style={{ left: `${mark}%` }} />}
     </div>
   );
 }
 
 /**
- * The on-track verdict. `deltaCents` positive means under pace.
+ * The pace verdict. `deltaCents` positive means spent less than even pace.
  *
- * One sentence, one colour. The overview deliberately has exactly one of
- * these at the top: the screen's job is to answer "am I alright?" before the
- * reader has to look at anything else.
+ * The words carry the direction ("Ahead of pace by", "Behind pace by");
+ * colour and icon only reinforce it.
  */
 export function Verdict({
   deltaCents,
   size = "md",
-  warningAtCents = -6000,
 }: {
   deltaCents: number;
   size?: "md" | "lg";
+  /** Kept for callers. */
   warningAtCents?: number;
 }) {
-  const ok = deltaCents >= 0;
-  const tone = ok ? "ok" : deltaCents > warningAtCents ? "warning" : "error";
-  const text = ok
-    ? `${formatNZD(deltaCents)} under pace`
-    : `${formatNZD(Math.abs(deltaCents))} over pace`;
-
-  const shell = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: size === "lg" ? 8 : 6,
-    color: `var(--status-${tone})`,
-    background: `var(--status-${tone}-bg)`,
-    border: `1px solid var(--status-${tone}-border)`,
-    borderRadius: "var(--radius-full)",
-    fontFamily: "var(--font-sans)",
-    whiteSpace: "nowrap" as const,
-  };
-
-  if (size === "lg") {
+  const style = size === "md" ? { padding: "2px 8px", fontSize: 13 } : undefined;
+  if (deltaCents === 0) {
     return (
-      <span
-        style={{
-          ...shell,
-          padding: "6px 14px",
-          fontSize: "var(--text-sm)",
-          fontWeight: "var(--weight-semibold)",
-        }}
-      >
-        {ok ? "On track" : "Off track"} ·{" "}
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontWeight: "var(--weight-medium)",
-          }}
-        >
-          {text}
-        </span>
+      <span className="delta even" style={style}>
+        On pace
       </span>
     );
   }
-
+  const ahead = deltaCents > 0;
   return (
-    <span
-      style={{
-        ...shell,
-        padding: "3px 10px",
-        fontSize: "var(--text-xs)",
-        fontWeight: "var(--weight-medium)",
-      }}
-    >
-      {text}
+    <span className={`delta ${ahead ? "ahead" : "behind"}`} style={style}>
+      <span className={`i ${ahead ? "i-check" : "i-warn"} sm`} aria-hidden="true" />
+      {ahead ? "Ahead of pace by " : "Behind pace by "}
+      <span className="num">{formatNZD(Math.abs(deltaCents))}</span>
     </span>
   );
 }
@@ -174,23 +97,9 @@ export function KV({
   mono?: boolean;
 }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 12,
-        fontSize: "var(--text-sm)",
-      }}
-    >
-      <span style={{ color: "var(--text-tertiary)" }}>{label}</span>
-      <span
-        style={{
-          fontFamily: mono ? "var(--font-mono)" : "var(--font-sans)",
-          color: tone ?? "var(--text-primary)",
-          textAlign: "right",
-        }}
-      >
+    <div className="row between" style={{ gap: 12, fontSize: 15 }}>
+      <span className="ink2">{label}</span>
+      <span className={mono ? "m" : undefined} style={{ color: tone, textAlign: "right" }}>
         {value}
       </span>
     </div>
@@ -212,32 +121,15 @@ export function Figure({
   noteTone?: string;
 }) {
   return (
-    <div>
-      <div
-        style={{
-          fontSize: "var(--text-xs)",
-          color: "var(--text-muted)",
-          marginBottom: 4,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        className="mb-num"
-        style={{ fontSize: "var(--text-md)", color: tone ?? "var(--text-primary)" }}
-      >
+    <div className="stack" style={{ gap: 2 }}>
+      <span className="t-xs ink3">{label}</span>
+      <span className="m" style={{ fontSize: 18, color: tone }}>
         {value}
-      </div>
+      </span>
       {note && (
-        <div
-          style={{
-            fontSize: "var(--text-xs)",
-            color: noteTone ?? "var(--text-tertiary)",
-            marginTop: 2,
-          }}
-        >
+        <span className="t-xs" style={{ color: noteTone ?? "var(--ink-3)" }}>
           {note}
-        </div>
+        </span>
       )}
     </div>
   );
@@ -246,46 +138,37 @@ export function Figure({
 /**
  * Daily spend bars across a period.
  *
- * Days after today are drawn faint rather than omitted, so the shape of the
- * bar chart is the shape of the period — you can see how much runway is left
- * without reading an axis.
+ * Days after today are drawn as dashed outlines rather than omitted, so the
+ * shape of the chart is the shape of the period — you can see how much
+ * runway is left without reading an axis. Today is drawn in ink.
  */
 export function DayBars({
   series,
 }: {
-  series: { label: string; cents: number; future: boolean }[];
+  series: { label: string; cents: number; future: boolean; today?: boolean }[];
 }) {
   const max = Math.max(...series.map((s) => s.cents), 1);
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 72 }}>
-      {series.map((s, i) => (
-        <div
-          key={i}
-          title={`${s.label}: ${formatNZD(s.cents)}`}
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "flex-end",
-            height: "100%",
-          }}
-        >
+    <div
+      className="daybars"
+      style={{ gridTemplateColumns: `repeat(${series.length}, minmax(0, 1fr))` }}
+    >
+      {series.map((s, i) => {
+        const cls = s.future ? "b f" : s.cents <= 0 ? "b z" : s.today ? "b t" : "b";
+        return (
           <div
-            style={{
-              height: `${(s.cents / max) * 100}%`,
-              minHeight: s.cents > 0 ? 3 : 1,
-              background: s.cents > 0 ? "var(--money-out)" : "var(--border-subtle)",
-              borderRadius: 2,
-              opacity: s.future ? 0.25 : 1,
-            }}
+            key={i}
+            className={cls}
+            title={`${s.label}: ${formatNZD(s.cents)}`}
+            style={s.future || s.cents <= 0 ? undefined : { height: `${(s.cents / max) * 100}%` }}
           />
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-/** Screen title, optional subtitle, optional actions. */
+/** Screen title, optional subtitle, optional actions on the right. */
 export function ScreenHead({
   title,
   sub,
@@ -296,45 +179,22 @@ export function ScreenHead({
   right?: ReactNode;
 }) {
   return (
-    <div className="mb-head">
-      <div>
-        <h2
-          style={{
-            margin: 0,
-            fontSize: "var(--text-xl)",
-            fontWeight: "var(--weight-bold)",
-            color: "var(--text-primary)",
-            letterSpacing: "var(--tracking-tight)",
-          }}
-        >
-          {title}
-        </h2>
-        {sub && (
-          <p
-            style={{
-              margin: "4px 0 0",
-              fontSize: "var(--text-sm)",
-              color: "var(--text-tertiary)",
-              maxWidth: 620,
-            }}
-          >
-            {sub}
-          </p>
-        )}
+    <div className="page-h">
+      <div className="grow stack" style={{ gap: 6 }}>
+        <h1 className="t-xl">{title}</h1>
+        {sub && <span className="t-s ink2">{sub}</span>}
       </div>
-      {right && <div className="mb-head-actions">{right}</div>}
+      {right && (
+        <div className="row wrap" style={{ gap: 10 }}>
+          {right}
+        </div>
+      )}
     </div>
   );
 }
 
 /**
- * A ranked horizontal bar list — label, amount, share of the total.
- *
- * Sits alongside `DayBars` rather than replacing it, and shares only its
- * max-scaling idea. `DayBars` is vertical, one bar per day of a period, and
- * hardcoded to `--money-out`; this is one bar per row with a label and an
- * amount, and it carries a `tone` because it is used for both sides of the
- * books.
+ * A ranked bar list — rank, label, share bar, share %, amount.
  *
  * Three decisions worth stating, because each of them is a way this could
  * quietly lie:
@@ -367,10 +227,13 @@ export type RankedBarRow = {
 
 export function RankedBars({
   rows,
-  tone = "var(--money-out)",
+  income = false,
   empty,
 }: {
   rows: RankedBarRow[];
+  /** Money in: green bars and a leading plus. */
+  income?: boolean;
+  /** Kept for callers; the side is chosen by `income`. */
   tone?: string;
   empty?: ReactNode;
 }) {
@@ -378,109 +241,77 @@ export function RankedBars({
   // the data starts, is a real state and reaches here as an empty array.
   if (rows.length === 0) return <>{empty ?? null}</>;
 
-  // Same guard as `DayBars`, for the same reason: every row zero would
-  // otherwise divide by zero and render a row of NaN% widths.
+  // Every row zero would otherwise divide by zero and render NaN% widths.
   const max = Math.max(...rows.map((row) => Math.abs(row.cents)), 1);
   const total = rows.reduce((sum, row) => sum + row.cents, 0);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {rows.map((row) => {
+    <div>
+      {rows.map((row, i) => {
         const body = (
           <>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                justifyContent: "space-between",
-                gap: 12,
-                marginBottom: 6,
-              }}
-            >
-              <span
-                className="mb-truncate"
-                style={{
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-secondary)",
-                  minWidth: 0,
-                }}
-              >
+            <span className="no">{String(i + 1).padStart(2, "0")}</span>
+            <span className="n">
+              <span className="mb-truncate" style={{ display: "block" }}>
                 {row.label}
               </span>
-              <span
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  gap: 8,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <span
-                  className="mb-num"
-                  style={{ fontSize: "var(--text-sm)", color: "var(--text-primary)" }}
-                >
-                  {formatNZD(row.cents)}
-                </span>
-                {/* No denominator, no percentage. An all-zero set would
-                    otherwise print "NaN%" or a confident 0% that reads like a
-                    measurement rather than an absence. */}
-                {total !== 0 && (
-                  <span
-                    className="mb-num"
-                    style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
-                  >
-                    {Math.round((row.cents / total) * 100)}%
-                  </span>
-                )}
-              </span>
-            </div>
-
-            <div
-              style={{
-                height: 6,
-                borderRadius: "var(--radius-full)",
-                background: "var(--surface-inset)",
-                overflow: "hidden",
-              }}
-            >
+              {row.note && <span className="t-xs ink3">{row.note}</span>}
+            </span>
+            <div className={income ? "share in" : "share"}>
               <div
+                className="fill"
                 style={{
-                  height: "100%",
                   width: `${(Math.abs(row.cents) / max) * 100}%`,
                   minWidth: row.cents !== 0 ? 2 : 0,
-                  background: tone,
-                  borderRadius: "var(--radius-full)",
                 }}
               />
             </div>
-
-            {row.note && (
-              <div
-                style={{
-                  marginTop: 4,
-                  fontSize: "var(--text-xs)",
-                  color: "var(--text-tertiary)",
-                }}
-              >
-                {row.note}
-              </div>
-            )}
+            {/* No denominator, no percentage: an all-zero set would otherwise
+                print "NaN%" or a confident 0% that reads like a measurement
+                rather than an absence. */}
+            <span className="p">
+              {total !== 0 ? `${Math.round((row.cents / total) * 100)}%` : ""}
+            </span>
+            <span className={income ? "a m in" : "a m"}>
+              {income && row.cents > 0 ? "+" : ""}
+              {formatNZD(row.cents)}
+            </span>
           </>
         );
 
         return row.href ? (
-          <Link
-            key={row.key}
-            href={row.href}
-            className="mb-row-link"
-            style={{ display: "block" }}
-          >
+          <Link key={row.key} href={row.href} className="rk mb-row-link">
             {body}
           </Link>
         ) : (
-          <div key={row.key}>{body}</div>
+          <div key={row.key} className="rk">
+            {body}
+          </div>
         );
       })}
     </div>
+  );
+}
+
+/** A money figure in the mono. `dir="in"` adds the plus and the green. */
+export function Money({
+  cents,
+  dir,
+  big = false,
+}: {
+  cents: number;
+  dir?: "in" | "out" | "net";
+  big?: boolean;
+}) {
+  const sign = dir === "in" ? "+" : dir === "net" ? (cents > 0 ? "+" : cents < 0 ? "−" : "") : "";
+  const shown = dir === "net" ? Math.abs(cents) : cents;
+  return (
+    <span
+      className={`m${dir === "in" ? " in" : ""}${big ? " big" : ""}`}
+      style={dir === "net" ? { fontWeight: 800 } : undefined}
+    >
+      {sign}
+      {formatNZD(shown)}
+    </span>
   );
 }

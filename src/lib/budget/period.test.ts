@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   currentPayPeriod,
+  dateRange,
   daysOf,
   dueDateIn,
   nzToday,
@@ -153,5 +154,17 @@ describe("dueDateIn", () => {
 
   it("resolves a day that falls in the period's first month", () => {
     expect(dueDateIn(period, 24)).toEqual(utcDate(2026, 6, 24));
+  });
+});
+
+describe("dateRange", () => {
+  it("prints the year once within a year", () => {
+    expect(dateRange(utcDate(2026, 9, 20), utcDate(2026, 10, 19))).toBe("20/10 – 19/11/2026");
+  });
+
+  it("prints both years when the range crosses one, so it can't read backwards", () => {
+    expect(dateRange(utcDate(2026, 11, 20), utcDate(2027, 0, 19))).toBe(
+      "20/12/2026 – 19/01/2027",
+    );
   });
 });

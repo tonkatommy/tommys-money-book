@@ -182,6 +182,21 @@ export function shortDate(date: Date): string {
   return formatDay(date);
 }
 
+/**
+ * "20/10 – 19/11/2026": the range chip every total carries.
+ *
+ * The year is printed once, on the end, unless the range crosses a year,
+ * where leaving it off the start would make "20/12 – 19/01/2027" read as a
+ * range that runs backwards.
+ */
+export function dateRange(start: Date, end: Date): string {
+  const dm = (d: Date) =>
+    `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  return start.getUTCFullYear() === end.getUTCFullYear()
+    ? `${dm(start)} – ${nzDate(end)}`
+    : `${nzDate(start)} – ${nzDate(end)}`;
+}
+
 /** "15/08/2026" — NZ convention, for anything that reads as a date proper. */
 export function nzDate(date: Date): string {
   const day = String(date.getUTCDate()).padStart(2, "0");

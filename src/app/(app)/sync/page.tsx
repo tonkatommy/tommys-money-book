@@ -1,26 +1,23 @@
 // The sync status page.
 //
-// Answers one question at a glance: is the database still filling itself? It
-// was the Phase 1 deliverable and lived at `/` until the budget took over as
-// the daily-driver screen; the content is unchanged, but the local Card,
-// Badge, StatusDot and Row helpers it used to carry are gone in favour of the
-// shared design system components.
+// Answers one question at a glance: is the database still filling itself?
+// Every figure in the budget is downstream of this page, and a sync that has
+// quietly stopped looks exactly like a sync with nothing to do. So the page
+// leads with two separate times — the last successful sync and the newest
+// transaction — because only the first one tells those two apart.
 //
 // A React Server Component, so the queries run on the server and only HTML
-// reaches the browser. No API route needed for a read.
+// reaches the browser. No API route needed for a read. There's no "Sync now"
+// button: a full Akahu sync takes long enough that holding a request open for
+// it is a worse trade than the CLI (README: Run a sync right now).
+//
+// Layout follows the Money Book canvas (Sync.dc.html).
 
 import { prisma } from "@/lib/prisma";
 import { formatNZD } from "@/lib/money";
-import { getSyncStatus, type SyncStatusView } from "@/lib/sync/status";
+import { getSyncStatus, STALE_AFTER_HOURS, type SyncStatusView } from "@/lib/sync/status";
 import { AppShell } from "@/components/app-shell";
-import {
-  Alert,
-  Badge,
-  Card,
-  StatusDot,
-  type Tone,
-} from "@/components/ui/primitives";
-import { KV, ScreenHead } from "@/components/ui/data";
+import { Alert, EmptyState } from "@/components/ui/primitives";
 import { parseBook, resolvePeriod } from "@/lib/budget/query";
 
 // Without this, Next.js would run the queries once at build time and bake the
@@ -74,283 +71,237 @@ export default async function SyncPage({
       basePath="/sync"
       splitFortnightly={settings.splitFortnightly}
     >
-      <div className="mb-stack">
-        <ScreenHead
-          title="Sync status"
-          sub="Every figure in the budget is downstream of this page. A sync that has quietly stopped looks exactly like a sync with nothing to do."
-        />
+      {data.ok &&
+        data.status.alerts.map((alert, index) => (
+          <Alert key={index} level={alert.level} icon={alert.level === "warning" ? "sync" : undefined}>
+            {alert.message}
+          </Alert>
+        ))}
 
-        {!data.ok ? (
-          <Card>
-            <StatusDot tone="error" label="Database unreachable" />
-            <pre
-              className="mb-num mb-scroll-x"
-              style={{
-                margin: "var(--space-4) 0 0",
-                padding: "var(--space-3)",
-                background: "var(--surface-inset)",
-                border: "1px solid var(--border-default)",
-                borderRadius: "var(--radius-md)",
-                fontSize: "var(--text-xs)",
-                color: "var(--text-secondary)",
-              }}
-            >
+      <div className="page-h">
+        <div className="grow stack" style={{ gap: 6 }}>
+          <h1 className="t-xl">Sync status</h1>
+          <span className="t-s ink2">
+            Every morning the worker fetches new transactions from ANZ and BNZ
+            through Akahu.
+          </span>
+        </div>
+      </div>
+
+      {!data.ok ? (
+        <div className="banner bad" role="alert">
+          <span className="i i-alert" aria-hidden="true" />
+          <div>
+            <p className="bt">Database unreachable</p>
+            <pre className="mono scroll t-xs" style={{ margin: "6px 0", whiteSpace: "pre-wrap" }}>
               {data.error}
             </pre>
-            <p
-              style={{
-                margin: "var(--space-4) 0 0",
-                fontSize: "var(--text-sm)",
-                color: "var(--text-tertiary)",
-              }}
-            >
-              Is Postgres running? Try <Code>docker compose up -d db</Code>
+            <p className="bb">
+              Is Postgres running? Try <code className="mono">docker compose up -d db</code>
             </p>
-          </Card>
-        ) : (
-          <>
-            {data.status.alerts.map((alert, index) => (
-              <Alert key={index} level={alert.level}>
-                {alert.message}
-              </Alert>
-            ))}
-
-            <Accounts accounts={data.status.accounts} />
-            <Runs runs={data.status.runs} />
-
-            <Card title="Database">
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "var(--space-2)",
-                }}
-              >
-                <KV label="Version" value={data.dbVersion} />
-                <KV label="Server time (NZ)" value={data.now} />
-              </div>
-            </Card>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      ) : (
+        <Healthy data={data} />
+      )}
     </AppShell>
+  );
+}
+
+function Healthy({ data }: { data: Extract<PageData, { ok: true }> }) {
+  const { status } = data;
+  const stale = status.alerts.length > 0;
+  const newest = status.accounts
+    .map((a) => a.lastTransactionAt)
+    .filter((d): d is Date => d !== null)
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+
+  return (
+    <>
+      <section className="health" aria-label="Sync health">
+        <div
+          className="card pad-l stack"
+          style={{ gap: 6, borderWidth: 2, borderColor: stale ? "var(--warn-line)" : "var(--accent)" }}
+        >
+          <span className="lbl">Last successful sync</span>
+          <span className="t-l mono" style={{ fontWeight: 600 }}>
+            {formatDateTime(status.lastSuccessfulRun)}
+          </span>
+          <span className="t-s ink2">
+            {status.lastSuccessfulRun ? "Should never be more than a day old." : "None on record yet."}
+          </span>
+        </div>
+        <div className="card pad-l stack" style={{ gap: 6 }}>
+          <span className="lbl">Newest transaction</span>
+          <span className="t-l mono" style={{ fontWeight: 600 }}>
+            {formatDate(newest ?? null)}
+          </span>
+          <span className="t-s ink2">Can be days old on a quiet weekend. That&apos;s fine.</span>
+        </div>
+        <div className="card pad-l stack" style={{ gap: 6 }}>
+          <span className="lbl">Flagged overdue after</span>
+          <span className="t-l mono" style={{ fontWeight: 600 }}>
+            {STALE_AFTER_HOURS} hours
+          </span>
+          <span className="t-s ink2">One missed morning, never a normal overnight gap.</span>
+        </div>
+      </section>
+
+      <div className="banner info">
+        <span className="i i-info" aria-hidden="true" />
+        <div>
+          <p className="bt">A stopped sync looks just like a quiet day</p>
+          <p className="bb">
+            So there are two separate times above. If the last successful sync
+            gets too old, figures everywhere carry a warning and the header dot
+            changes shape.
+          </p>
+        </div>
+      </div>
+
+      <Accounts accounts={status.accounts} />
+      <Runs runs={status.runs} />
+
+      <p className="t-xs ink3">
+        Database: <span className="mono">{data.dbVersion}</span> · server time (NZ){" "}
+        <span className="mono">{data.now}</span>
+      </p>
+    </>
   );
 }
 
 function Accounts({ accounts }: { accounts: SyncStatusView["accounts"] }) {
   if (accounts.length === 0) {
     return (
-      <Card title="Accounts">
-        <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-          No accounts yet. Run <Code>npm run sync:baseline</Code> to pull them
-          from Akahu.
-        </p>
-      </Card>
+      <EmptyState
+        icon="sync"
+        title="No accounts yet"
+        body="Run npm run sync:baseline to pull them from Akahu."
+      />
     );
   }
 
   return (
-    <Card title="Accounts" padded={false}>
-      <div className="mb-rows">
-        {accounts.map((account) => (
-          <div key={account.id} className="mb-row" style={{ padding: "14px 0" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "var(--text-sm)",
-                  fontWeight: "var(--weight-medium)",
-                  color: "var(--text-primary)",
-                }}
-              >
-                {account.name}
-              </span>
-              <span className="mb-num" style={{ fontSize: "var(--text-sm)" }}>
-                {account.balanceCents !== null
-                  ? formatNZD(account.balanceCents)
-                  : "—"}
-              </span>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 8,
-                margin: "var(--space-3) 0",
-              }}
-            >
-              {account.book ? (
-                <Badge tone="neutral">{account.book}</Badge>
-              ) : (
-                <Badge tone="warning">needs mapping</Badge>
-              )}
-
-              {account.akahuStatus === "INACTIVE" && (
-                <Badge tone="error">needs re-consent</Badge>
-              )}
-
-              {account.driftCents !== null && account.driftCents !== 0 && (
-                <Badge tone={account.driftIsPersistent ? "error" : "warning"}>
-                  drift {formatNZD(account.driftCents)}
-                </Badge>
-              )}
-
-              {account.driftCents === 0 && <Badge tone="ok">balanced</Badge>}
-
-              {/* Neutral, not a warning. Pending authorisations are normal on
-                  a card account and reconciliation already accounts for them —
-                  but showing the figure explains why the bank's balance is
-                  lower than the transactions that have actually cleared. */}
-              {account.pendingTotalCents !== 0 && (
-                <Badge tone="neutral">
-                  {formatNZD(account.pendingTotalCents)} pending
-                </Badge>
-              )}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-2)",
-              }}
-            >
-              <KV label="Transactions" value={String(account.transactionCount)} />
-              <KV label="History from" value={formatDate(account.historyStartDate)} />
-              <KV
-                label="Latest transaction"
-                value={formatDate(account.lastTransactionAt)}
-              />
-              <KV label="Last synced" value={formatDateTime(account.lastSyncedAt)} />
-            </div>
-          </div>
-        ))}
+    <section className="txl" aria-label="Accounts">
+      <div className="grp-h">
+        <span className="sect-t">Accounts · {accounts.length}</span>
+        <span className="t-xs ink2">Balanced = our running total matches the bank&apos;s balance</span>
       </div>
-    </Card>
+      <div className="acch">
+        <span>Account</span>
+        <span>Book</span>
+        <span style={{ textAlign: "right" }}>Balance</span>
+        <span>Checks</span>
+        <span>Last synced</span>
+      </div>
+      {accounts.map((account) => (
+        <div key={account.id} className="acc">
+          <span className="an">
+            <span className="semi">{account.name}</span>
+            <span className="range">
+              {account.transactionCount} transactions · history from{" "}
+              {formatDate(account.historyStartDate)}
+            </span>
+          </span>
+          <span className="abk">
+            {account.book ? (
+              <>
+                <span className={`bk ${account.book === "BUSINESS" ? "b" : "p"}`} aria-hidden="true" />{" "}
+                {account.book === "BUSINESS" ? "Business" : "Personal"}
+              </>
+            ) : (
+              <span className="na">none</span>
+            )}
+          </span>
+          <span className="ab m">
+            {account.balanceCents !== null ? formatNZD(account.balanceCents) : "—"}
+          </span>
+          <span className="as">
+            {!account.book && <span className="badge b-warn">Needs mapping</span>}
+            {account.akahuStatus === "INACTIVE" && <span className="badge b-bad">Needs re-consent</span>}
+            {account.driftCents !== null && account.driftCents !== 0 && (
+              <span className={account.driftIsPersistent ? "badge b-bad" : "badge b-warn"}>
+                {account.driftIsPersistent && <span className="i i-alert" aria-hidden="true" />}
+                Drift {formatNZD(account.driftCents)}
+                {account.driftIsPersistent ? " · persisting" : ""}
+              </span>
+            )}
+            {account.driftCents === 0 && (
+              <span className="badge b-ok">
+                <span className="i i-check" aria-hidden="true" />
+                Balanced
+              </span>
+            )}
+            {/* Neutral, not a warning. Pending authorisations are normal on a
+                card account and reconciliation already accounts for them, but
+                the figure explains why the bank's balance is lower than what
+                has actually cleared. */}
+            {account.pendingTotalCents !== 0 && (
+              <span className="badge b-pend">{formatNZD(account.pendingTotalCents)} pending</span>
+            )}
+          </span>
+          <span className="al">{formatDateTime(account.lastSyncedAt)}</span>
+        </div>
+      ))}
+    </section>
   );
 }
 
 function Runs({ runs }: { runs: SyncStatusView["runs"] }) {
   if (runs.length === 0) {
     return (
-      <Card title="Recent sync runs">
-        <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-          Nothing yet. Run <Code>npm run sync:baseline</Code>.
-        </p>
-      </Card>
+      <EmptyState icon="sync" title="No sync runs yet" body="Run npm run sync:baseline." />
     );
   }
 
   return (
-    <Card title="Recent sync runs">
-      {/* Genuinely tabular, so it stays a table and scrolls sideways on a
-          phone rather than being restacked into something harder to scan. */}
-      <div className="mb-scroll-x">
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            fontFamily: "var(--font-sans)",
-            fontSize: "var(--text-sm)",
-          }}
-        >
-          <thead>
-            <tr
-              style={{
-                textAlign: "left",
-                fontSize: "var(--text-xs)",
-                letterSpacing: "var(--tracking-wide)",
-                textTransform: "uppercase",
-                color: "var(--text-muted)",
-              }}
-            >
-              <th style={cell}>Started</th>
-              <th style={cell}>Trigger</th>
-              <th style={cell}>Status</th>
-              <th style={{ ...cell, textAlign: "right" }}>New</th>
-              {/* Duplicates are shown on purpose: a healthy daily sync always
-                  has some, because the window deliberately re-reads a week.
-                  Zero duplicates would mean the overlap is gone. */}
-              <th style={{ ...cell, textAlign: "right" }}>Already held</th>
-              <th style={{ ...cell, textAlign: "right" }}>Took</th>
-            </tr>
-          </thead>
-          <tbody style={{ color: "var(--text-secondary)" }}>
-            {runs.map((run) => (
-              <tr key={run.id} style={{ borderTop: "1px solid var(--border-subtle)" }}>
-                <td style={{ ...cell, whiteSpace: "nowrap" }}>
-                  {formatDateTime(run.startedAt)}
-                </td>
-                <td style={{ ...cell, color: "var(--text-tertiary)" }}>
-                  {run.trigger}
-                </td>
-                <td style={cell}>
-                  <Badge tone={runTone(run.status)}>{run.status}</Badge>
-                </td>
-                <td className="mb-num" style={{ ...cell, textAlign: "right" }}>
-                  {run.inserted}
-                </td>
-                <td
-                  className="mb-num"
-                  style={{ ...cell, textAlign: "right", color: "var(--text-muted)" }}
-                >
-                  {run.duplicates}
-                </td>
-                <td
-                  className="mb-num"
-                  style={{ ...cell, textAlign: "right", color: "var(--text-muted)" }}
-                >
-                  {run.durationMs !== null
-                    ? `${(run.durationMs / 1000).toFixed(1)}s`
-                    : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <section className="txl" aria-label="Recent sync runs">
+      <div className="grp-h">
+        <span className="sect-t">Recent runs</span>
+        {/* Duplicates are shown on purpose: a healthy daily sync always has
+            some, because the window deliberately re-reads a week. Zero would
+            mean the overlap is gone. */}
+        <span className="t-xs ink2">
+          Already held = rows seen before and skipped. Some every day is healthy.
+        </span>
       </div>
-    </Card>
+      {runs.map((run) => (
+        <div key={run.id} className="run">
+          <span className="num t-s">{formatDateTime(run.startedAt)}</span>
+          <span>
+            <span className={runBadge(run.status)}>{runLabel(run.status)}</span>
+          </span>
+          <span className="t-s ink2">
+            {run.trigger.toLowerCase()}
+            {run.durationMs !== null ? ` · ${(run.durationMs / 1000).toFixed(1)}s` : ""}
+            {run.error ? ` · ${run.error}` : ""}
+          </span>
+          <span className="num t-s">{run.inserted} new</span>
+          <span className="num t-s ink3">{run.duplicates} held</span>
+        </div>
+      ))}
+    </section>
   );
 }
 
-const cell = { padding: "10px 14px 10px 0" } as const;
-
-function runTone(status: string): Tone {
-  if (status === "SUCCESS") return "ok";
-  if (status === "FAILED") return "error";
-  if (status === "PARTIAL") return "warning";
-  return "neutral";
+function runBadge(status: string): string {
+  if (status === "SUCCESS") return "badge b-ok";
+  if (status === "FAILED") return "badge b-bad";
+  if (status === "PARTIAL") return "badge b-warn";
+  return "badge";
 }
 
-function Code({ children }: { children: React.ReactNode }) {
-  return (
-    <code
-      style={{
-        background: "var(--surface-inset)",
-        border: "1px solid var(--border-default)",
-        borderRadius: "var(--radius-sm)",
-        padding: "2px 6px",
-        fontFamily: "var(--font-mono)",
-        fontSize: "var(--text-xs)",
-      }}
-    >
-      {children}
-    </code>
-  );
+function runLabel(status: string): string {
+  return status[0] + status.slice(1).toLowerCase();
 }
 
 // Dates are stored as bare DATEs at UTC midnight, so they're formatted in UTC.
-// Using NZ time here would display 2026-07-20 as 2026-07-21 in winter.
+// Using NZ time here would display 20/07/2026 as 21/07/2026 in winter.
 function formatDate(date: Date | null): string {
-  return date ? date.toISOString().slice(0, 10) : "—";
+  if (!date) return "—";
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${d}/${m}/${date.getUTCFullYear()}`;
 }
 
 // Timestamps, unlike dates, are real instants — those do belong in NZ time.

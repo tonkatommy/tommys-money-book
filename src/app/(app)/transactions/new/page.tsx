@@ -4,10 +4,13 @@
 // unknowable from a feed. Cash Withdrawals exists as a category so that money
 // isn't guessed into Groceries; this screen is how the other half of that
 // story gets recorded.
+//
+// Layout follows the Money Book canvas (AddCash.dc.html).
 
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { Card } from "@/components/ui/primitives";
-import { ScreenHead } from "@/components/ui/data";
+import { Alert, Icon } from "@/components/ui/primitives";
+import { withBook } from "@/components/ui/nav";
 import { prisma } from "@/lib/prisma";
 import { nzToday } from "@/lib/budget/period";
 import { parseBook, resolvePeriod } from "@/lib/budget/query";
@@ -44,26 +47,45 @@ export default async function NewTransactionPage({
       basePath="/transactions/new"
       splitFortnightly={settings.splitFortnightly}
     >
-      <div className="mb-stack">
-        <ScreenHead
-          title="Add a cash entry"
-          sub="For money the bank never saw — cash out of a withdrawal, a koha, anything settled in notes."
-        />
+      <div className="stack" style={{ gap: 16, width: "100%", maxWidth: 640 }}>
+        <Link
+          href={withBook("/transactions", book)}
+          className="row t-s semi"
+          style={{ textDecoration: "none", minHeight: 44 }}
+        >
+          <Icon name="back" size="sm" />
+          Transactions
+        </Link>
+        <h1 className="t-xl">Add cash entry</h1>
+        <p className="t-s ink2">
+          For money the bank never sees: cash out of a withdrawal, a koha,
+          anything settled in notes. You can edit it later; nothing is ever deleted.
+        </p>
 
         {cashAccounts < 2 && (
-          <Card>
-            <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--status-error)" }}>
-              The cash accounts haven&rsquo;t been created yet, so saving will
-              fail. Run <code>npm run accounts:seed-cash</code> first.
-            </p>
-          </Card>
+          <Alert
+            level="error"
+            title="The cash accounts don't exist yet, so saving will fail"
+          >
+            Run <code className="mono">npm run accounts:seed-cash</code> first.
+          </Alert>
         )}
+
+        <Alert level="info" title="Only for cash with no bank withdrawal behind it">
+          Spending from a withdrawal already categorised as Cash Withdrawals is
+          counted. Adding the purchases too would count the same money twice.
+        </Alert>
 
         <ManualEntryForm
           book={book}
           today={nzToday().toISOString().slice(0, 10)}
           categories={categories}
+          cancelHref={withBook("/transactions", book)}
         />
+        <p className="t-xs ink3">
+          Left blank, the category shows as &ldquo;needs a category&rdquo; and is
+          counted in the warning on Budget.
+        </p>
       </div>
     </AppShell>
   );

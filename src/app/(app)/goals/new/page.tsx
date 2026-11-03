@@ -1,8 +1,9 @@
-// A new savings goal.
+// A new savings goal. Layout follows the canvas's GoalDetail artboard in its
+// "new" state.
 
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { ButtonLink, Card } from "@/components/ui/primitives";
-import { ScreenHead } from "@/components/ui/data";
+import { EmptyState, Icon } from "@/components/ui/primitives";
 import { nzToday, utcDate } from "@/lib/budget/period";
 import { resolvePeriod } from "@/lib/budget/query";
 import { iso } from "@/lib/reports/fy";
@@ -23,7 +24,7 @@ export default async function NewGoalPage() {
 
   return (
     <AppShell
-      active="budget"
+      active="goals"
       book="PERSONAL"
       // Goals are personal only, so the toggle would have nothing to toggle.
       lockBook
@@ -31,28 +32,21 @@ export default async function NewGoalPage() {
       basePath="/goals/new"
       splitFortnightly={settings.splitFortnightly}
     >
-      <div className="mb-stack">
-        <ScreenHead
-          title="New savings goal"
-          right={
-            <ButtonLink href="/goals" variant="ghost" size="sm">
-              All goals
-            </ButtonLink>
-          }
-        />
+      <Link href="/goals" className="row t-s semi" style={{ textDecoration: "none", minHeight: 44 }}>
+        <Icon name="back" size="sm" />
+        Savings goals
+      </Link>
+      <h1 className="t-xl">New goal</h1>
 
-        {accounts.length === 0 ? (
-          <Card>
-            <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-              No personal bank account is available to save in. A goal needs a
-              bank-fed account in the personal book; run{" "}
-              <code>npm run accounts:map</code> if one is still unassigned.
-            </p>
-          </Card>
-        ) : (
-          <GoalForm accounts={accounts} minDate={iso(tomorrow)} />
-        )}
-      </div>
+      {accounts.length === 0 ? (
+        <EmptyState
+          icon="target"
+          title="No personal account to save in"
+          body="A goal needs a bank-fed account in the personal book. Run npm run accounts:map if one is still unassigned."
+        />
+      ) : (
+        <GoalForm accounts={accounts} minDate={iso(tomorrow)} />
+      )}
     </AppShell>
   );
 }

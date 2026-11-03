@@ -243,6 +243,8 @@ export type ListRow = {
   categoryBook: Book | null;
   /** Part of a confirmed transfer pair — neither income nor expense. */
   transferPairId: string | null;
+  /** Who decided the category. MANUAL is the one no rule or sync overwrites. */
+  categorySource: "RULE" | "MANUAL" | "TRANSFER" | null;
 };
 
 export type TransactionPage = {
@@ -296,6 +298,7 @@ export async function queryTransactions(
       notes: true,
       source: true,
       transferPairId: true,
+      categorySource: true,
       account: { select: { name: true } },
       category: { select: { id: true, name: true, book: true } },
     },
@@ -315,6 +318,8 @@ export async function queryTransactions(
       categoryName: row.category?.name ?? null,
       categoryBook: row.category?.book ?? null,
       transferPairId: row.transferPairId,
+      // Who decided the category, shown as provenance on each row.
+      categorySource: row.categorySource,
     })),
     total,
     // The clamped page, not the requested one — the pager renders this, so an

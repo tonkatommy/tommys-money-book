@@ -1,15 +1,27 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Exo_2, JetBrains_Mono, Open_Sans } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// The design's three faces: Exo 2 for headings, Open Sans for body, a mono
+// for every figure and date. next/font downloads them at build time and
+// serves them from this app, so a LAN-only box never asks Google for a font
+// at runtime. design.css reads the variables.
+const exo = Exo_2({
+  variable: "--font-exo",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const openSans = Open_Sans({
+  variable: "--font-open-sans",
   subsets: ["latin"],
+  weight: ["400", "600", "700"],
+});
+
+const jetbrains = JetBrains_Mono({
+  variable: "--font-jetbrains",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -19,13 +31,13 @@ export const metadata: Metadata = {
 
 // `viewport-fit=cover` is what makes env(safe-area-inset-bottom) report a real
 // value — without it the bottom tab bar sits under the home indicator on an
-// iPhone. Colour scheme is declared so form controls and scrollbars render
-// dark; this app has no light theme.
+// iPhone. Both colour schemes are declared because the theme follows the OS
+// (design.css), so form controls and scrollbars must be able to render either.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  colorScheme: "dark",
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({
@@ -34,8 +46,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en-NZ" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body>{children}</body>
+    <html
+      lang="en-NZ"
+      className={`${exo.variable} ${openSans.variable} ${jetbrains.variable}`}
+    >
+      {/* .mb is the design system's root: tokens, theme and the 768px
+          container that every layout switch measures against. */}
+      <body className="mb">{children}</body>
     </html>
   );
 }

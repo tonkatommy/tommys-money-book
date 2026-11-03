@@ -15,22 +15,17 @@ export function LoginForm({ next }: { next: string }) {
   );
 
   return (
-    <form
-      action={formAction}
-      style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}
-    >
+    <form action={formAction} className="card pad-l stack" style={{ gap: 18 }}>
       <input type="hidden" name="next" value={next} />
 
       <FormField
         label="Password"
         htmlFor="password"
         error={state?.error}
-        hint={
-          pending ? "Checking…" : "Set in the server environment as APP_PASSWORD."
-        }
+        hint={pending ? "Checking…" : "There's only one account here, so no username."}
       >
         <input
-          className="mb-input"
+          className="inp"
           id="password"
           name="password"
           type="password"
@@ -39,22 +34,11 @@ export function LoginForm({ next }: { next: string }) {
           autoFocus
           disabled={pending}
           aria-invalid={state?.error ? true : undefined}
-          style={{
-            minHeight: 44,
-            fontFamily: "var(--font-mono)",
-            fontSize: "var(--text-base)",
-            letterSpacing: ".12em",
-            opacity: pending ? 0.6 : 1,
-          }}
+          style={{ fontFamily: "var(--fm)", letterSpacing: ".12em", opacity: pending ? 0.6 : 1 }}
         />
       </FormField>
 
-      <Button
-        type="submit"
-        variant="primary"
-        disabled={pending}
-        style={{ width: "100%", minHeight: 44 }}
-      >
+      <Button type="submit" variant="primary" disabled={pending} block>
         {pending ? "Signing in…" : "Sign in"}
       </Button>
     </form>

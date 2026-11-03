@@ -6,29 +6,32 @@
 // running one deliberately left out — on day 5 every category looks under
 // budget, which is arithmetic, not information. Phase 4b spec §2.
 //
-// The trend chart is an enhancement over the table under it, never a source
-// of figures (4b spec §6). Recharts draws nothing without JavaScript — it was
-// measured, see the chart component's header — so the table carries every
-// number and the page is complete without the chart ever appearing.
+// The trend chart is an enhancement over the tables, never a source of
+// figures (4b spec §6). Recharts draws nothing without JavaScript, so the
+// tables carry every number and the page is complete without the chart.
 //
 // That is also why the chart is handed `unbudgetedSpentCents` alongside the
 // budgeted spend: the two have to say the same thing. A column drawn from
 // budgeted spending alone shows an empty bar over a period with no budgets,
 // reading as "nothing was spent" next to a table row saying $8,555.58.
+//
+// Layout follows the Money Book canvas (Past.dc.html). The "consistently
+// over" and "padded" groupings are the existing adjustment hints (4b spec §8)
+// grouped by direction, not a second, looser rule.
 
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { BudgetTrendChart } from "@/components/charts/budget-trend-chart";
-import { Alert, ButtonLink, Card, CategoryTag } from "@/components/ui/primitives";
-import { ScreenHead } from "@/components/ui/data";
+import { Alert, CalendarChip, EmptyState, Icon, Missing } from "@/components/ui/primitives";
 import { withBook } from "@/components/ui/nav";
 import { formatNZD, formatNZDWhole } from "@/lib/money";
-import { nzDate } from "@/lib/budget/period";
+import { dateRange } from "@/lib/budget/period";
 import { iso } from "@/lib/reports/fy";
 import {
   HINT_MIN_MARGIN_CENTS,
   HINT_MIN_MARGIN_PERCENT,
   HINT_MIN_PERIODS,
+  varianceCents,
   type BudgetHint,
 } from "@/lib/budget/history";
 import {
@@ -40,9 +43,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const cell = { padding: "10px 14px 10px 0" } as const;
-const numeric = { ...cell, textAlign: "right" } as const;
-const muted = { fontSize: "var(--text-xs)", color: "var(--text-muted)" } as const;
+const month = new Intl.DateTimeFormat("en-NZ", { month: "short", timeZone: "UTC" });
 
 export default async function BudgetHistoryPage({
   searchParams,
@@ -62,35 +63,37 @@ export default async function BudgetHistoryPage({
 
   const first = view.periods[0].period;
   const last = view.periods[view.periods.length - 1].period;
-  const range = `${nzDate(first.start)} – ${nzDate(last.end)}`;
 
   const shell = (children: React.ReactNode) => (
     <AppShell
-      active="budget"
+      active="history"
       book={book}
       period={period}
       basePath="/budget/history"
       splitFortnightly={settings.splitFortnightly}
     >
-      <div className="mb-stack">
-        <ScreenHead
-          title="Budget history"
-          sub={
-            <>
-              The {HISTORY_PERIODS} complete pay periods before this one,{" "}
-              <strong>{range}</strong>. The period you&apos;re in is on the
-              overview, because a part-finished period always looks under
-              budget.
-            </>
-          }
-          right={
-            <ButtonLink href={withBook("/budget", book)} variant="ghost" size="sm">
-              This period
-            </ButtonLink>
-          }
-        />
-        {children}
+      <Link
+        href={withBook("/budget", book)}
+        className="row t-s semi"
+        style={{ textDecoration: "none", minHeight: 44 }}
+      >
+        <Icon name="back" size="sm" />
+        Budget
+      </Link>
+      <div className="page-h">
+        <div className="grow stack" style={{ gap: 6 }}>
+          <h1 className="t-xl">How past periods went</h1>
+          <span className="t-s ink2">
+            The last {HISTORY_PERIODS} complete pay periods. Budgets shown are what
+            was set at the time. The period you&apos;re in is on Budget, because a
+            part-finished period always looks under.
+          </span>
+        </div>
+        <CalendarChip kind="pp" label={`${HISTORY_PERIODS} periods`}>
+          {dateRange(first.start, last.end)}
+        </CalendarChip>
       </div>
+      {children}
     </AppShell>
   );
 
@@ -98,20 +101,30 @@ export default async function BudgetHistoryPage({
   // of six "no budget" rows would be accurate and tell the reader nothing.
   if (view.isFirstRun) {
     return shell(
-      <Card title="Nothing to compare against yet">
-        <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-          No budget has been set for this book, so there is no history of
-          budget against spending to show.{" "}
-          <Link href={withBook("/budget/setup", book)}>Set the budget</Link>.
-        </p>
-      </Card>,
+      <EmptyState
+        icon="chart"
+        title="Nothing to compare against yet"
+        body="No budget has been set for this book, so there's no history of budget against spending to show."
+        action={
+          <Link className="btn primary" href={withBook("/budget/setup", book)}>
+            Set the budget
+          </Link>
+        }
+      />,
     );
   }
 
   // Budgets exist, but none fall inside the window — the state for the first
-  // pay period or two after a budget is first set. Said once, above the table,
-  // rather than left for six rows of "no budget" to imply.
+  // pay period or two after a budget is first set. Said once, above the
+  // tables, rather than left for six rows of "no budget" to imply.
   const windowUnbudgeted = view.periods.every((p) => p.allowanceCents === null);
+
+  const overHints = view.hints.filter((h) => h.direction === "over");
+  const underHints = view.hints.filter((h) => h.direction === "under");
+  const hintById = new Map(view.hints.map((h) => [h.categoryId, h]));
+  const aboutRight = view.categories.filter(
+    (c) => c.summary.budgetedCount >= HINT_MIN_PERIODS && !hintById.has(c.categoryId),
+  );
 
   const categories = [...view.categories].sort(
     (a, b) => b.summary.overCount - a.summary.overCount || a.name.localeCompare(b.name),
@@ -120,42 +133,75 @@ export default async function BudgetHistoryPage({
   return shell(
     <>
       {view.uncategorisedCount > 0 && (
-        <Alert level="warning">
-          {view.uncategorisedCount} transaction
-          {view.uncategorisedCount === 1 ? "" : "s"} in these periods{" "}
-          {view.uncategorisedCount === 1 ? "has" : "have"} no category, so every
-          figure below understates what was actually spent — and a category
-          looking under budget may simply be missing its spending.{" "}
-          <Link
-            href={withBook(
-              `/transactions?uncategorised=1&from=${iso(first.start)}&to=${iso(last.end)}`,
-              book,
-            )}
-          >
-            Categorise them
-          </Link>
-          .
-        </Alert>
+        <Alert
+          title={`${view.uncategorisedCount} transaction${view.uncategorisedCount === 1 ? "" : "s"} in these periods ${view.uncategorisedCount === 1 ? "has" : "have"} no category`}
+          affects="Understates: every period's spending. A category looking under may just be missing its spending."
+          actions={
+            <Link
+              className="btn sm"
+              href={withBook(
+                `/transactions?uncategorised=1&from=${iso(first.start)}&to=${iso(last.end)}`,
+                book,
+              )}
+            >
+              Categorise them
+            </Link>
+          }
+        />
       )}
 
       {view.unassignedAccountCount > 0 && (
-        <Alert level="warning">
-          {view.unassignedAccountCount} account
-          {view.unassignedAccountCount === 1 ? " is" : "s are"} not assigned to a
-          set of books, so nothing in {view.unassignedAccountCount === 1 ? "it" : "them"}{" "}
-          appears below. Run <code>npm run accounts:map</code>.
+        <Alert
+          title={`${view.unassignedAccountCount} account${view.unassignedAccountCount === 1 ? " isn't" : "s aren't"} assigned to a book`}
+          affects="Missing: everything in it"
+        >
+          Run <code className="mono">npm run accounts:map</code>.
         </Alert>
       )}
 
-      <Card title="Whole budget">
-        {windowUnbudgeted && (
-          <p style={{ margin: "0 0 var(--space-4)", fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-            No budget was set in any of these periods — budgets here start
-            after them. The spending below is the shape of those months, not a
-            measure against a budget.
-          </p>
-        )}
+      {windowUnbudgeted && (
+        <Alert level="info" title="No budget was set in any of these periods">
+          Budgets here start after them. The spending below is the shape of those
+          months, not a measure against a budget.
+        </Alert>
+      )}
 
+      <div className="grid cols-3" style={{ gap: 16 }}>
+        <div className={`card stack${overHints.length ? " hl-over" : ""}`} style={{ gap: 6 }}>
+          <span className="lbl" style={{ color: overHints.length ? "var(--warn)" : undefined }}>
+            Consistently over
+          </span>
+          <span className="t-m">
+            {overHints.length ? overHints.map((h) => h.name).join(" · ") : "Nothing"}
+          </span>
+          <span className="t-s ink2">
+            Over in each of the last {HINT_MIN_PERIODS} budgeted periods, by at least{" "}
+            {formatNZDWhole(HINT_MIN_MARGIN_CENTS)} and {HINT_MIN_MARGIN_PERCENT}%.
+          </span>
+        </div>
+        <div className={`card stack${underHints.length ? " hl-pad" : ""}`} style={{ gap: 6 }}>
+          <span className="lbl">Padded</span>
+          <span className="t-m">
+            {underHints.length ? underHints.map((h) => h.name).join(" · ") : "Nothing"}
+          </span>
+          <span className="t-s ink2">
+            Under by the same margin, {HINT_MIN_PERIODS} periods running.
+          </span>
+        </div>
+        <div className="card stack" style={{ gap: 6 }}>
+          <span className="lbl">About right</span>
+          <span className="t-m">
+            {aboutRight.length ? aboutRight.map((c) => c.name).join(" · ") : "Nothing yet"}
+          </span>
+          <span className="t-s ink2">
+            Budgeted at least {HINT_MIN_PERIODS} times with no consistent pattern
+            either way.
+          </span>
+        </div>
+      </div>
+
+      <section className="card pad-l stack" style={{ gap: 14 }} aria-label="Whole budget">
+        <h2 className="t-m">Whole budget</h2>
         {/* Draws the same array the table below renders. It appears only once
             JavaScript has run, and adds no figure the table lacks. */}
         <BudgetTrendChart
@@ -166,94 +212,67 @@ export default async function BudgetHistoryPage({
             unbudgetedSpentCents: p.unbudgetedSpentCents,
           }))}
         />
-
-        {/* Genuinely tabular, so it stays a table and scrolls sideways on a
-            phone, like the monthly report. The date range sits under each
-            period's label rather than in a column of its own, for the same
-            phone-width reason that screen gives. */}
-        <div className="mb-scroll-x">
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              fontFamily: "var(--font-sans)",
-              fontSize: "var(--text-sm)",
-            }}
-          >
+        <div className="scroll">
+          <table className="tbl tight">
             <thead>
-              <tr
-                style={{
-                  textAlign: "left",
-                  fontSize: "var(--text-xs)",
-                  letterSpacing: "var(--tracking-wide)",
-                  textTransform: "uppercase",
-                  color: "var(--text-muted)",
-                }}
-              >
-                <th style={cell}>Period</th>
-                <th style={numeric}>Budget</th>
-                <th style={numeric}>Spent</th>
-                <th style={numeric}>Over / under</th>
+              <tr>
+                <th>Period</th>
+                <th className="num">Budget</th>
+                <th className="num">Spent</th>
+                <th className="num">Over / under</th>
               </tr>
             </thead>
-            <tbody style={{ color: "var(--text-secondary)" }}>
+            <tbody>
               {view.periods.map((p) => (
-                <tr key={p.period.label} style={{ borderTop: "1px solid var(--border-subtle)" }}>
-                  <td style={{ ...cell, whiteSpace: "nowrap" }}>
-                    <div>{p.period.label}</div>
-                    <div className="mb-num" style={{ ...muted, marginTop: 2 }}>
-                      {nzDate(p.period.start)} – {nzDate(p.period.end)}
-                    </div>
+                <tr key={p.period.label}>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {p.period.label}
+                    <div className="range">{dateRange(p.period.start, p.period.end)}</div>
                     {/* Per period, not only in the alert: this is the likeliest
                         reason one month looks better than its neighbours. */}
                     {p.uncategorisedCount > 0 && (
-                      <div style={{ ...muted, marginTop: 2, color: "var(--status-warning)" }}>
+                      <span className="badge b-need" style={{ marginTop: 4 }}>
                         {p.uncategorisedCount} uncategorised
-                      </div>
+                      </span>
                     )}
                   </td>
-
-                  <td className="mb-num" style={numeric}>
+                  <td className="num">
                     {p.allowanceCents === null ? (
-                      <span style={muted}>no budget</span>
+                      <Missing>no budget</Missing>
                     ) : (
                       formatNZDWhole(p.allowanceCents)
                     )}
                   </td>
-
                   {/* Spending outside the budget is kept as its own figure:
                       dropped, the period silently shrinks; merged, it reads as
                       an overspend of money nobody budgeted. With no budget at
-                      all it IS the period's spending, so it prints as the
-                      figure rather than as a footnote under a dash. */}
-                  <td className="mb-num" style={numeric}>
+                      all it IS the period's spending. */}
+                  <td className="num">
                     {p.allowanceCents === null ? (
                       <>
                         {formatNZD(p.unbudgetedSpentCents)}
-                        <div style={{ ...muted, marginTop: 2 }}>none of it budgeted</div>
+                        <div className="t-xs ink3">none of it budgeted</div>
                       </>
                     ) : (
                       <>
                         {formatNZD(p.spentCents)}
                         {/* Refunds can push unbudgeted spending negative, and
-                            "+ -$20.00" is not a sentence. A net refund is
-                            money coming back, so it says that instead. */}
+                            "+ -$20.00" is not a sentence. */}
                         {p.unbudgetedSpentCents > 0 && (
-                          <div style={{ ...muted, marginTop: 2 }}>
+                          <div className="t-xs ink3">
                             + {formatNZD(p.unbudgetedSpentCents)} not budgeted
                           </div>
                         )}
                         {p.unbudgetedSpentCents < 0 && (
-                          <div style={{ ...muted, marginTop: 2 }}>
-                            {formatNZD(Math.abs(p.unbudgetedSpentCents))} refunded,
-                            outside the budget
+                          <div className="t-xs ink3">
+                            {formatNZD(Math.abs(p.unbudgetedSpentCents))} refunded, outside
+                            the budget
                           </div>
                         )}
                       </>
                     )}
                   </td>
-
-                  <td className="mb-num" style={numeric}>
+                  <td className="num">
                     <Variance cents={p.varianceCents} />
                   </td>
                 </tr>
@@ -261,99 +280,143 @@ export default async function BudgetHistoryPage({
             </tbody>
           </table>
         </div>
-      </Card>
+      </section>
 
-      <Card title="Worth a look">
-        {view.hints.length === 0 ? (
-          <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-            Nothing has been consistently over or under its budget by enough
-            to matter — at least {formatNZDWhole(HINT_MIN_MARGIN_CENTS)} and{" "}
-            {HINT_MIN_MARGIN_PERCENT}%, {HINT_MIN_PERIODS} budgeted periods
-            running.
-          </p>
-        ) : (
-          <div className="mb-rows">
-            {view.hints.map((hint) => (
-              <div key={hint.categoryId} className="mb-row" style={{ padding: "12px 0" }}>
-                <div style={{ marginBottom: 6 }}>
-                  <CategoryTag name={hint.name} book={book} />
-                </div>
-                <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                  <HintText hint={hint} />{" "}
-                  <Link href={withBook("/budget/setup", book)}>Adjust the budget</Link>.
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <Card title="By category" padded={false}>
-        <div className="mb-rows" style={{ padding: "0 var(--space-6)" }}>
-          {categories.map((category) => {
-            const { summary } = category;
-            return (
-              <Link
-                key={category.categoryId}
-                href={withBook(`/budget/category/${category.categoryId}`, book)}
-                className="mb-row-link mb-row"
-                style={{
-                  padding: "14px 0",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <CategoryTag name={category.name} book={category.book} />
-                  <div style={{ ...muted, marginTop: 4 }}>
-                    {/* "over in 0 of 2" is the sort key read out loud. The
-                        categories that never went over are the ones a reader
-                        skips, so they say so in words. */}
-                    {summary.budgetedCount === 0
-                      ? "no budget in these periods"
-                      : summary.overCount === 0
-                        ? `never over, in ${summary.budgetedCount} budgeted period${
-                            summary.budgetedCount === 1 ? "" : "s"
-                          }`
-                        : `over in ${summary.overCount} of ${summary.budgetedCount} budgeted period${
-                            summary.budgetedCount === 1 ? "" : "s"
-                          }`}
-                  </div>
-                </div>
-                <div className="mb-num" style={{ textAlign: "right", fontSize: "var(--text-sm)" }}>
-                  <div style={{ color: "var(--text-primary)" }}>
-                    {summary.averageSpentCents === null
-                      ? "—"
-                      : `${formatNZD(summary.averageSpentCents)} avg`}
-                  </div>
-                  <div style={{ ...muted, marginTop: 2 }}>
-                    {category.currentStandingCents === null
-                      ? "not budgeted now"
-                      : `budget now ${formatNZDWhole(category.currentStandingCents)}`}
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
+      <section className="card" style={{ padding: 0 }} aria-label="Budget versus actual by category">
+        <div className="card-h" style={{ padding: "16px 16px 0" }}>
+          <h2>By category</h2>
         </div>
-      </Card>
+        <div className="scroll">
+          <table className="tbl" style={{ minWidth: 980 }}>
+            <thead>
+              <tr>
+                <th style={{ position: "sticky", left: 0 }}>Category</th>
+                <th className="num">Budget now</th>
+                {view.periods.map((p) => (
+                  <th key={p.period.label} className="num" title={dateRange(p.period.start, p.period.end)}>
+                    {month.format(p.period.start)}
+                  </th>
+                ))}
+                <th className="num">Average</th>
+                <th>Suggestion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map((category) => {
+                const hint = hintById.get(category.categoryId);
+                return (
+                  <tr key={category.categoryId}>
+                    <td
+                      className="semi"
+                      style={{ position: "sticky", left: 0, background: "var(--surface)" }}
+                    >
+                      <Link href={withBook(`/budget/category/${category.categoryId}`, book)}>
+                        {category.name}
+                      </Link>
+                    </td>
+                    <td className="num ink2">
+                      {category.currentStandingCents === null ? (
+                        <Missing>none</Missing>
+                      ) : (
+                        formatNZDWhole(category.currentStandingCents)
+                      )}
+                    </td>
+                    {category.cells.map((cell) => {
+                      const v = varianceCents(cell);
+                      const cls =
+                        hint?.direction === "over" && v !== null && v < 0
+                          ? "num hl-over"
+                          : hint?.direction === "under" && v !== null && v > 0
+                            ? "num hl-pad"
+                            : "num";
+                      return (
+                        <td key={cell.period.label} className={cls}>
+                          {cell.spentCents === 0 && cell.allowance === null ? (
+                            <span className="ink3">—</span>
+                          ) : (
+                            formatNZD(cell.spentCents)
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td className="num semi">
+                      {category.summary.averageSpentCents === null
+                        ? "—"
+                        : formatNZD(category.summary.averageSpentCents)}
+                    </td>
+                    <td>
+                      <Suggestion summary={category.summary} hint={hint} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="t-xs ink3" style={{ padding: "12px 16px" }}>
+          Columns are pay periods named by the month they start in; hover a heading
+          for its dates. Averages cover budgeted periods only. Highlighted cells are
+          the periods behind a suggestion.
+        </p>
+      </section>
+
+      {view.hints.length > 0 && (
+        <section className="card pad-l stack" style={{ gap: 4 }} aria-label="Worth a look">
+          <h2 className="t-m">Worth a look</h2>
+          {view.hints.map((hint) => (
+            <div key={hint.categoryId} className="li" style={{ display: "block" }}>
+              <p className="semi">{hint.name}</p>
+              <p className="t-s ink2">
+                <HintText hint={hint} />{" "}
+                <Link href={withBook("/budget/setup", book)}>Adjust the budget</Link>
+              </p>
+            </div>
+          ))}
+        </section>
+      )}
     </>,
   );
 }
 
-/** Over in red, under in green, no budget as a plain dash. */
+/** Over and under in words; colour only reinforces them. */
 function Variance({ cents }: { cents: number | null }) {
-  if (cents === null) return <span style={muted}>—</span>;
+  if (cents === null) return <span className="ink3">—</span>;
   if (cents === 0) return <span>on budget</span>;
   const over = cents < 0;
   return (
-    <span style={{ color: over ? "var(--status-error)" : "var(--status-ok)" }}>
+    <span className={`delta ${over ? "behind" : "ahead"}`} style={{ padding: "2px 8px", fontSize: 13 }}>
       {formatNZD(Math.abs(cents))} {over ? "over" : "under"}
     </span>
   );
+}
+
+function Suggestion({
+  summary,
+  hint,
+}: {
+  summary: { budgetedCount: number; overCount: number };
+  hint?: BudgetHint;
+}) {
+  if (summary.budgetedCount === 0) return <span className="badge">No budget in window</span>;
+  if (hint?.direction === "over") {
+    return (
+      <>
+        <span className="badge b-warn">
+          Over {summary.overCount} of {summary.budgetedCount}
+        </span>{" "}
+        <span className="t-s ink2">Raise to {formatNZDWhole(hint.suggestedCents)}</span>
+      </>
+    );
+  }
+  if (hint?.direction === "under") {
+    return (
+      <>
+        <span className="badge b-pend">Padded</span>{" "}
+        <span className="t-s ink2">Try {formatNZDWhole(hint.suggestedCents)}</span>
+      </>
+    );
+  }
+  return <span className="badge b-ok">No change suggested</span>;
 }
 
 /** One hint, worded for what it is: a bill, a $0 budget, or ordinary spending. */
@@ -366,8 +429,8 @@ function HintText({ hint }: { hint: BudgetHint & { name: string } }) {
   if (hint.zeroStanding) {
     return (
       <>
-        Budgeted at $0 but averaging <strong>{average}</strong> a period, and
-        spent in each of the last three. Something like {suggested} would cover it.
+        Budgeted at $0 but averaging <strong>{average}</strong> a period, and spent
+        in each of the last three. Something like {suggested} would cover it.
       </>
     );
   }
@@ -380,17 +443,17 @@ function HintText({ hint }: { hint: BudgetHint & { name: string } }) {
     return (
       <>
         This bill has averaged <strong>{average}</strong> against{" "}
-        {hint.estimated ? "an estimated" : "a budgeted"} {standing}, {runs}.
-        Setting it to {suggested} would match what actually arrives.
+        {hint.estimated ? "an estimated" : "a budgeted"} {standing}, {runs}. Setting
+        it to {suggested} would match what actually arrives.
       </>
     );
   }
 
   return (
     <>
-      Averaging <strong>{average}</strong> a period against a {standing}{" "}
-      budget, {runs}. {hint.direction === "over" ? "Raising" : "Lowering"} it to{" "}
-      {suggested} would match what you actually spend.
+      Averaging <strong>{average}</strong> a period against a {standing} budget,{" "}
+      {runs}. {hint.direction === "over" ? "Raising" : "Lowering"} it to {suggested}{" "}
+      would match what you actually spend.
     </>
   );
 }
