@@ -205,6 +205,26 @@ export function nzDate(date: Date): string {
 }
 
 /**
+ * "03/11/2026 07:00": a real instant (a sync run, "now"), in NZ time.
+ *
+ * Not `nzDate(instant)`: that reads the UTC calendar fields, which is right
+ * for a stored `@db.Date` and a day early for any instant before 13:00 NZDT
+ * (12:00 NZST). A 07:00 morning sync is 18:00 UTC the previous day, so it
+ * would print as yesterday next to today's time. The date goes through
+ * `nzToday` first, the same conversion every period boundary uses.
+ */
+const nzClock = new Intl.DateTimeFormat("en-NZ", {
+  timeZone: "Pacific/Auckland",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+export function nzDateTime(instant: Date): string {
+  return `${nzDate(nzToday(instant))} ${nzClock.format(instant)}`;
+}
+
+/**
  * The date a fixed bill falls due within a period.
  *
  * A bill on the 3rd belongs to the month *after* a period starting on the

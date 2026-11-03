@@ -17,20 +17,13 @@ import { Alert, CalendarChip, Icon, Missing } from "@/components/ui/primitives";
 import { PaceBar, Verdict } from "@/components/ui/data";
 import { withBook } from "@/components/ui/nav";
 import { formatNZD, formatNZDWhole } from "@/lib/money";
-import { dateRange, nzDate } from "@/lib/budget/period";
+import { dateRange, nzDate, nzDateTime } from "@/lib/budget/period";
 import { getBudgetView, parseBook, resolvePeriod } from "@/lib/budget/query";
 import { linePaceDeltaCents } from "@/lib/budget/totals";
 import { getShellStatus } from "@/lib/shell";
 import { FirstRun } from "./first-run";
 
 export const dynamic = "force-dynamic";
-
-const time = new Intl.DateTimeFormat("en-NZ", {
-  timeZone: "Pacific/Auckland",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
 
 const weekday = new Intl.DateTimeFormat("en-NZ", { weekday: "short", timeZone: "UTC" });
 
@@ -70,7 +63,7 @@ export default async function BudgetPage({
         title="Bank sync is failing, so these figures may be out of date"
         affects={
           status.lastSuccess
-            ? `Last good sync: ${nzDate(status.lastSuccess)} ${time.format(status.lastSuccess)}`
+            ? `Last good sync: ${nzDateTime(status.lastSuccess)}`
             : "No successful sync on record"
         }
         actions={
@@ -88,7 +81,7 @@ export default async function BudgetPage({
         title="Sync is overdue"
         affects={
           status.lastSuccess
-            ? `Figures as of ${nzDate(status.lastSuccess)} ${time.format(status.lastSuccess)}`
+            ? `Figures as of ${nzDateTime(status.lastSuccess)}`
             : "No successful sync on record"
         }
         actions={
@@ -213,7 +206,7 @@ export default async function BudgetPage({
             </span>
             {status.lastSuccess && (
               <span className="range">
-                Balances as of {nzDate(status.lastSuccess)} {time.format(status.lastSuccess)}
+                Balances as of {nzDateTime(status.lastSuccess)}
               </span>
             )}
           </div>

@@ -22,7 +22,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Alert, Icon, Missing } from "@/components/ui/primitives";
 import { formatNZD } from "@/lib/money";
-import { nzDate } from "@/lib/budget/period";
+import { nzDate, nzToday } from "@/lib/budget/period";
 import { parseBook, resolvePeriod } from "@/lib/budget/query";
 import { parseFY, selectableFYs } from "@/lib/reports/fy";
 import { getIr3Pack } from "@/lib/reports/query";
@@ -125,7 +125,7 @@ export default async function Ir3Page({
             <div className="grid cols-3" style={{ gap: 12, marginTop: 4 }}>
               <div className="stack">
                 <span className="t-xs ink3">Prepared</span>
-                <span className="num t-s">{nzDate(now)}</span>
+                <span className="num t-s">{nzDate(nzToday(now))}</span>
               </div>
               <div className="stack">
                 <span className="t-xs ink3">Books</span>

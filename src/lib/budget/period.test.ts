@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   currentPayPeriod,
   dateRange,
+  nzDateTime,
   daysOf,
   dueDateIn,
   nzToday,
@@ -166,5 +167,21 @@ describe("dateRange", () => {
     expect(dateRange(utcDate(2026, 11, 20), utcDate(2027, 0, 19))).toBe(
       "20/12/2026 – 19/01/2027",
     );
+  });
+});
+
+describe("nzDateTime", () => {
+  it("puts a 07:00 NZ morning sync on its NZ date, not the UTC one before it", () => {
+    // 07:00 NZDT on 3 November is 18:00 UTC on 2 November.
+    expect(nzDateTime(new Date("2026-11-02T18:00:00Z"))).toBe("03/11/2026 07:00");
+  });
+
+  it("agrees with the UTC date in the NZ afternoon", () => {
+    expect(nzDateTime(new Date("2026-11-03T02:30:00Z"))).toBe("03/11/2026 15:30");
+  });
+
+  it("follows NZST in winter", () => {
+    // 07:00 NZST on 15 July is 19:00 UTC on 14 July.
+    expect(nzDateTime(new Date("2026-07-14T19:00:00Z"))).toBe("15/07/2026 07:00");
   });
 });
