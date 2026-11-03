@@ -1,30 +1,29 @@
 // Reports: the Financial Breakdown sheet, live.
 //
 // Twelve calendar months across one financial year, with income, expenses and
-// net. A table rather than a chart, and deliberately: three series at phone
-// width read better as three columns of numbers than as anything drawn, and
-// §6 of the 3c spec rules out a chart library for the whole section anyway.
+// net. The table carries every figure. Above it sit plain CSS bars, drawn on
+// the server from the same array, so the shape of the year reads at a glance
+// without a chart library or a line of client JavaScript (§6 of the 3c spec
+// rules a library out for this section; this isn't one).
 //
 // Calendar months here, 20th-to-19th pay periods on `/budget`. They are two
 // different Augusts and always will be, so every row prints its literal date
 // range beside its figures.
 //
-// A pure server component. The year selector and the book toggle are links,
-// so the screen works with JavaScript disabled.
+// A pure server component. Layout follows the Money Book canvas
+// (Monthly.dc.html).
 
 import { AppShell } from "@/components/app-shell";
-import { Card } from "@/components/ui/primitives";
-import { Figure, KV, ScreenHead } from "@/components/ui/data";
+import { Alert, Icon, Missing } from "@/components/ui/primitives";
 import { formatNZD } from "@/lib/money";
 import { parseBook, resolvePeriod } from "@/lib/budget/query";
 import { parseFY, selectableFYs } from "@/lib/reports/fy";
 import { getMonthlyBreakdown } from "@/lib/reports/query";
-import { FyLinks, QualityAlerts, ReportLinks } from "../parts";
+import { FyChip, FyLinks, QualityAlerts, ReportLinks } from "../parts";
 
 export const dynamic = "force-dynamic";
 
-const cell = { padding: "10px 14px 10px 0" } as const;
-const numeric = { ...cell, textAlign: "right" } as const;
+const signed = (cents: number) => `${cents >= 0 ? "+" : "−"}${formatNZD(Math.abs(cents))}`;
 
 export default async function ReportMonthsPage({
   searchParams,
@@ -47,11 +46,19 @@ export default async function ReportMonthsPage({
   const view = await getMonthlyBreakdown(book, fy, now);
 
   const years = selectableFYs(now);
+  const bookName = book === "BUSINESS" ? "Business book" : "Personal book";
 
   // A year with nothing in it at all is a real state — an FY selected before
   // the Akahu feed starts — and it says so once rather than printing twelve
   // convincing zero rows.
   const empty = view.transactions === 0;
+
+  // Bars share one scale across in and out, so the two can be compared.
+  const max = Math.max(
+    1,
+    ...view.months.map((m) => Math.max(m.incomeCents, m.expensesCents)),
+  );
+  const pct = (cents: number) => `${(Math.max(0, cents) / max) * 100}%`;
 
   return (
     <AppShell
@@ -62,263 +69,175 @@ export default async function ReportMonthsPage({
       preserveQuery={params.fy ? `fy=${fy.year}` : undefined}
       splitFortnightly={settings.splitFortnightly}
     >
-      <div className="mb-stack">
-        <ScreenHead
-          title="Month by month"
-          sub={
-            <>
-              Calendar months across <strong>{view.rangeLabel}</strong>. These
-              are not the budget screen&apos;s months — that runs 20th to 19th,
-              and the two will never agree.
-            </>
-          }
-          right={
-            <FyLinks
-              years={years}
-              current={fy}
-              book={book}
-              basePath="/reports/months"
-            />
-          }
-        />
+      <QualityAlerts quality={view.quality} book={book} fy={fy} rangeEnd={view.rangeEnd} />
 
-        <ReportLinks book={book} fy={fy} active="months" />
-
-        <QualityAlerts
-          quality={view.quality}
-          book={book}
-          fy={fy}
-          rangeEnd={view.rangeEnd}
-        />
-
-        <Card
-          title={`${fy.label} totals`}
-          action={
-            <span
-              className="mb-num"
-              style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
-            >
-              {view.rangeLabel}
-            </span>
-          }
-        >
-          <div className="mb-grid-tight">
-            <Figure
-              label="Money in"
-              value={formatNZD(view.incomeCents)}
-              tone="var(--money-in)"
-              note="income categories only"
-            />
-            <Figure
-              label="Money out"
-              value={formatNZD(view.expensesCents)}
-              tone="var(--money-out)"
-              note="expense categories only"
-            />
-          </div>
-
-          <div
-            style={{
-              marginTop: "var(--space-5)",
-              paddingTop: "var(--space-4)",
-              borderTop: "1px solid var(--border-subtle)",
-            }}
-          >
-            <KV
-              label={`Net for ${fy.label}`}
-              value={formatNZD(view.netCents)}
-              tone={
-                view.netCents >= 0 ? "var(--money-in)" : "var(--status-error)"
-              }
-            />
-          </div>
-        </Card>
-
-        <Card title="Every month">
-          {empty && (
-            <p
-              style={{
-                margin: "0 0 var(--space-4)",
-                fontSize: "var(--text-sm)",
-                color: "var(--text-tertiary)",
-              }}
-            >
-              Nothing categorised in this book for {fy.label}. The months below
-              are the shape of the year, not a measurement of it — the bank
-              feed may simply not reach back this far.
-            </p>
-          )}
-
-          {/* Genuinely tabular, so it stays a table and scrolls sideways on a
-              phone rather than being restacked into something harder to scan.
-              Same treatment as the sync run log. */}
-          <div className="mb-scroll-x">
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontFamily: "var(--font-sans)",
-                fontSize: "var(--text-sm)",
-              }}
-            >
-              <thead>
-                <tr
-                  style={{
-                    textAlign: "left",
-                    fontSize: "var(--text-xs)",
-                    letterSpacing: "var(--tracking-wide)",
-                    textTransform: "uppercase",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  {/* The literal range sits UNDER each month name rather than
-                      in a column of its own. As a column it was 155px of
-                      DD/MM/YYYY at phone width, which pushed In, Out and Net
-                      off the right edge — a table you have to scroll
-                      sideways to find any money in. The range still prints on
-                      every row, as §2 requires; it just reads as part of the
-                      month rather than competing with the figures. */}
-                  <th style={cell}>Month</th>
-                  <th style={numeric}>In</th>
-                  <th style={numeric}>Out</th>
-                  <th style={numeric}>Net</th>
-                </tr>
-              </thead>
-              <tbody style={{ color: "var(--text-secondary)" }}>
-                {view.months.map((month) => (
-                  <tr
-                    key={month.label}
-                    style={{
-                      borderTop: "1px solid var(--border-subtle)",
-                      // A month that has not happened is drawn faint, the
-                      // same way DayBars draws the rest of a pay period.
-                      opacity: month.future ? 0.45 : 1,
-                    }}
-                  >
-                    <td style={{ ...cell, whiteSpace: "nowrap" }}>
-                      <div>
-                        {month.label}
-                        {month.partial && (
-                          <span
-                            style={{
-                              marginLeft: 8,
-                              fontSize: "var(--text-xs)",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            so far
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        className="mb-num"
-                        style={{
-                          marginTop: 2,
-                          fontSize: "var(--text-xs)",
-                          color: "var(--text-tertiary)",
-                        }}
-                      >
-                        {month.range}
-                      </div>
-                    </td>
-
-                    {/* A future month is not a zero month. Printing $0.00
-                        against February in August asserts something the app
-                        cannot know; an em dash says "not yet", which is the
-                        truth and is also what the reader would have assumed. */}
-                    {month.future ? (
-                      <td
-                        colSpan={3}
-                        style={{
-                          ...numeric,
-                          color: "var(--text-muted)",
-                          fontSize: "var(--text-xs)",
-                        }}
-                      >
-                        not yet
-                      </td>
-                    ) : (
-                      <>
-                        <td
-                          className="mb-num"
-                          style={{
-                            ...numeric,
-                            color:
-                              month.incomeCents === 0
-                                ? "var(--text-muted)"
-                                : "var(--money-in)",
-                          }}
-                        >
-                          {formatNZD(month.incomeCents)}
-                        </td>
-                        <td
-                          className="mb-num"
-                          style={{
-                            ...numeric,
-                            color:
-                              month.expensesCents === 0
-                                ? "var(--text-muted)"
-                                : "var(--money-out)",
-                          }}
-                        >
-                          {formatNZD(month.expensesCents)}
-                        </td>
-                        <td
-                          className="mb-num"
-                          style={{
-                            ...numeric,
-                            color:
-                              month.transactions === 0
-                                ? "var(--text-muted)"
-                                : month.netCents >= 0
-                                  ? "var(--text-primary)"
-                                  : "var(--status-error)",
-                          }}
-                        >
-                          {formatNZD(month.netCents)}
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr
-                  style={{
-                    borderTop: "1px solid var(--border-default)",
-                    color: "var(--text-primary)",
-                    fontWeight: "var(--weight-semibold)",
-                  }}
-                >
-                  <td style={{ ...cell, whiteSpace: "nowrap" }}>
-                    <div>{fy.label}</div>
-                    <div
-                      className="mb-num"
-                      style={{
-                        marginTop: 2,
-                        fontSize: "var(--text-xs)",
-                        color: "var(--text-tertiary)",
-                        fontWeight: "var(--weight-medium)",
-                      }}
-                    >
-                      {view.rangeLabel}
-                    </div>
-                  </td>
-                  <td className="mb-num" style={numeric}>
-                    {formatNZD(view.incomeCents)}
-                  </td>
-                  <td className="mb-num" style={numeric}>
-                    {formatNZD(view.expensesCents)}
-                  </td>
-                  <td className="mb-num" style={numeric}>
-                    {formatNZD(view.netCents)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </Card>
+      <div className="page-h">
+        <div className="grow stack" style={{ gap: 6 }}>
+          <h1 className="t-xl">Month by month</h1>
+          <span className="t-s ink2">
+            {bookName} · calendar months, 1st to last day. Not the Budget
+            screen&apos;s months, which run 20th to 19th.
+          </span>
+        </div>
+        <FyLinks years={years} current={fy} book={book} basePath="/reports/months" />
       </div>
+      <div className="row wrap" style={{ gap: 12 }}>
+        <ReportLinks book={book} fy={fy} active="months" />
+        <FyChip fy={fy} rangeEnd={view.rangeEnd} />
+      </div>
+
+      {empty && (
+        <Alert level="info" title={`Nothing categorised in this book for ${fy.label}`}>
+          The months below are the shape of the year, not a measurement of it.
+          The bank feed may simply not reach back this far.
+        </Alert>
+      )}
+
+      <section className="card pad-l stack" style={{ gap: 12 }} aria-label="Chart">
+        <div className="row between wrap">
+          <h2 className="t-m">Money in and out</h2>
+          <div className="legend">
+            <span>
+              <span className="sw" style={{ background: "var(--in)" }} />
+              In
+            </span>
+            <span>
+              <span className="sw" style={{ background: "var(--ink-2)" }} />
+              Out
+            </span>
+            <span>
+              <span
+                className="sw"
+                style={{
+                  background: "repeating-linear-gradient(135deg, var(--ink-3) 0 3px, transparent 3px 6px)",
+                  border: "1px solid var(--ink-3)",
+                }}
+              />
+              Partial month
+            </span>
+            <span>
+              <span className="sw" style={{ border: "1px dashed var(--line-2)" }} />
+              Not yet
+            </span>
+          </div>
+        </div>
+        <div
+          className="vbars"
+          style={{ height: 200, gap: 6 }}
+          role="img"
+          aria-label={`Money in and out by calendar month across ${fy.label}. Every figure is in the table below.`}
+        >
+          {view.months.map((m) => (
+            <div key={m.label} className="g" style={{ gap: 2 }}>
+              {m.future ? (
+                <div
+                  className="bar"
+                  style={{ height: 30, border: "1px dashed var(--line-2)", borderBottom: 0 }}
+                />
+              ) : (
+                <>
+                  <div className={m.partial ? "bar part" : "bar ins"} style={{ height: pct(m.incomeCents) }} />
+                  <div className={m.partial ? "bar part" : "bar outs"} style={{ height: pct(m.expensesCents) }} />
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="vlabels" style={{ gap: 6 }}>
+          {view.months.map((m) => (
+            <span key={m.label}>{m.label.slice(0, 3)}</span>
+          ))}
+        </div>
+      </section>
+
+      {/* Genuinely tabular, so it stays a table and scrolls sideways on a
+          phone rather than being restacked into something harder to scan. */}
+      <section className="card" style={{ padding: 0 }} aria-label="Every month">
+        <div className="scroll">
+          <table className="tbl" style={{ minWidth: 560 }}>
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th className="num">
+                  <span className="dirl in">
+                    <Icon name="in" size="sm" />
+                    In
+                  </span>
+                </th>
+                <th className="num">
+                  <span className="dirl out">
+                    <Icon name="out" size="sm" />
+                    Out
+                  </span>
+                </th>
+                <th className="num">
+                  <span className="dirl net">
+                    <Icon name="net" size="sm" />
+                    Net
+                  </span>
+                </th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {view.months.map((m) => (
+                <tr key={m.label} className={m.partial ? "sub" : undefined}>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <span className={m.future ? "ink3" : undefined}>{m.label}</span>
+                    <div className="range">{m.range}</div>
+                  </td>
+                  {/* A future month is not a zero month. Printing $0.00
+                      against February in August asserts something the app
+                      cannot know. */}
+                  {m.future ? (
+                    <>
+                      <td className="num">
+                        <Missing>not yet</Missing>
+                      </td>
+                      <td className="num">
+                        <Missing>not yet</Missing>
+                      </td>
+                      <td className="num">
+                        <Missing>not yet</Missing>
+                      </td>
+                      <td />
+                    </>
+                  ) : (
+                    <>
+                      <td className="num m in">+{formatNZD(m.incomeCents)}</td>
+                      <td className="num">{formatNZD(m.expensesCents)}</td>
+                      <td className="num semi" style={{ color: m.netCents < 0 ? "var(--bad)" : undefined }}>
+                        {signed(m.netCents)}
+                      </td>
+                      <td>
+                        {m.partial ? (
+                          <span className="badge b-pend">Partial · so far</span>
+                        ) : (
+                          <span className="t-s ink3">Complete</span>
+                        )}
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+              <tr className="tot">
+                <td>
+                  {fy.label}
+                  <div className="range" style={{ fontWeight: 500 }}>
+                    {view.rangeLabel}
+                  </div>
+                </td>
+                <td className="num m in">+{formatNZD(view.incomeCents)}</td>
+                <td className="num">{formatNZD(view.expensesCents)}</td>
+                <td className="num" style={{ color: view.netCents < 0 ? "var(--bad)" : undefined }}>
+                  {signed(view.netCents)}
+                </td>
+                <td />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </AppShell>
   );
 }

@@ -8,12 +8,13 @@
 //
 // A manual row has no bank record to protect, so its fields become a third
 // form (spec §4b).
+//
+// Layout follows the Money Book canvas (TxDetail.dc.html).
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { Badge, Card, CategoryTag } from "@/components/ui/primitives";
-import { KV, ScreenHead } from "@/components/ui/data";
+import { Icon, Provenance } from "@/components/ui/primitives";
 import { withBook } from "@/components/ui/nav";
 import { prisma } from "@/lib/prisma";
 import { formatNZD } from "@/lib/money";
@@ -50,6 +51,17 @@ export default async function TransactionPage({
   const options = book ? await getFilterOptions(book) : { categories: [] };
 
   const isManual = transaction.source === "MANUAL";
+  const income = transaction.amountCents > 0;
+  const bookName = book === "BUSINESS" ? "Business" : "Personal";
+
+  const fact = (label: React.ReactNode, value: React.ReactNode, mono = false) => (
+    <div className="li">
+      <dt className="grow t-s ink2">{label}</dt>
+      <dd className={mono ? "num" : "t-s"} style={{ margin: 0, textAlign: "right" }}>
+        {value}
+      </dd>
+    </div>
+  );
 
   return (
     <AppShell
@@ -59,73 +71,48 @@ export default async function TransactionPage({
       basePath="/transactions"
       splitFortnightly={settings.splitFortnightly}
     >
-      <div className="mb-stack">
-        <ScreenHead
-          title={transaction.payee ?? transaction.description}
-          sub={
-            <>
-              <Link href={withBook("/transactions", book ?? "PERSONAL")}>
-                ← All transactions
-              </Link>
-            </>
-          }
-        />
+      <Link
+        href={withBook("/transactions", book ?? "PERSONAL")}
+        className="row t-s semi"
+        style={{ textDecoration: "none", minHeight: 44 }}
+      >
+        <Icon name="back" size="sm" />
+        Transactions
+      </Link>
 
-        <Card title="What the bank says" action={isManual ? <Badge tone="neutral">cash entry</Badge> : undefined}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-            <KV label="Date" value={nzDate(transaction.date)} />
-            <KV
-              label="Amount"
-              value={formatNZD(transaction.amountCents)}
-              tone={transaction.amountCents > 0 ? "var(--money-in)" : undefined}
-            />
-            <KV label="Account" value={transaction.account.name} mono={false} />
-            <KV label="Description" value={transaction.description} mono={false} />
-            {transaction.payee && <KV label="Payee" value={transaction.payee} mono={false} />}
-            {transaction.merchantName && (
-              <KV label="Merchant" value={transaction.merchantName} mono={false} />
-            )}
-            {transaction.akahuCategoryName && (
-              <KV label="Akahu called it" value={transaction.akahuCategoryName} mono={false} />
-            )}
-            <KV
-              label="Category now"
-              value={
-                transaction.category ? (
-                  <CategoryTag
-                    name={transaction.category.name}
-                    book={transaction.category.book}
-                  />
-                ) : (
-                  <Badge tone="warning">Needs a category</Badge>
-                )
-              }
-              mono={false}
-            />
-            {transaction.categorySource && (
-              <KV
-                label="Decided by"
-                value={
-                  transaction.categorySource === "MANUAL"
-                    ? "you, by hand"
-                    : transaction.categorySource === "RULE"
-                      ? "a rule in definitions.ts"
-                      : "confirming a transfer pair"
-                }
-                mono={false}
-              />
+      <div className="page-h">
+        <div className="grow stack" style={{ gap: 8 }}>
+          <div className="row wrap">
+            {isManual && (
+              <span className="badge b-cash">
+                <Icon name="cash" />
+                Cash entry
+              </span>
             )}
             {transaction.transferPairId && (
-              <KV
-                label="Transfer"
-                value="Paired — nets to zero, so it is neither income nor an expense"
-                mono={false}
-              />
+              <span className="badge b-xfer">
+                <Icon name="swap" />
+                Transfer
+              </span>
             )}
+            <span className="range">{nzDate(transaction.date)}</span>
           </div>
-        </Card>
+          <h1 className="t-xl">{transaction.payee ?? transaction.description}</h1>
+        </div>
+        <div className="stack" style={{ gap: 2, alignItems: "flex-end" }}>
+          <span className={`dirl ${income ? "in" : "out"}`}>
+            <Icon name={income ? "in" : "out"} size="sm" />
+            {income ? "Money in" : "Money out"}
+          </span>
+          <span className={income ? "m in" : "m"} style={{ fontSize: 36 }}>
+            {income ? "+" : ""}
+            {formatNZD(Math.abs(transaction.amountCents))}
+          </span>
+        </div>
+      </div>
 
-        {isManual && (
+      <div className="grid cols-2" style={{ gap: 20, alignItems: "start" }}>
+        {isManual ? (
           <ManualFieldsForm
             id={transaction.id}
             date={transaction.date.toISOString().slice(0, 10)}
@@ -134,26 +121,93 @@ export default async function TransactionPage({
             amountCents={transaction.amountCents}
             notes={transaction.notes}
           />
-        )}
-
-        {book ? (
-          <CategoryForm
-            id={transaction.id}
-            categoryId={transaction.category?.id ?? null}
-            categories={options.categories}
-          />
         ) : (
-          <Card title="Category">
-            <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>
-              {transaction.account.name} has not been assigned to a book yet, so
-              there are no categories to choose from. Run{" "}
-              <code>npm run accounts:map</code> first — guessing the book is how
-              business spending ends up in the personal ledger.
-            </p>
-          </Card>
+          <section className="card pad-l stack" style={{ gap: 14 }} aria-label="What the bank says">
+            <div className="row between">
+              <h2 className="t-m">What the bank says</h2>
+              <span className="badge">
+                <Icon name="lock" />
+                Read only
+              </span>
+            </div>
+            <dl className="stack" style={{ gap: 0, margin: 0 }}>
+              {fact("Date", nzDate(transaction.date), true)}
+              {fact(
+                "Amount",
+                `${formatNZD(Math.abs(transaction.amountCents))} ${income ? "credit" : "debit"}`,
+                true,
+              )}
+              {fact("Description", <span className="mono">{transaction.description}</span>)}
+              {transaction.payee && fact("Payee", transaction.payee)}
+              {transaction.merchantName && fact("Merchant", transaction.merchantName)}
+              {fact(
+                "Account",
+                <>
+                  {transaction.account.name}
+                  {book ? (
+                    <>
+                      {" · "}
+                      <span className={`bk ${book === "BUSINESS" ? "b" : "p"}`} aria-hidden="true" />{" "}
+                      {bookName}
+                    </>
+                  ) : (
+                    " · no book yet"
+                  )}
+                </>,
+              )}
+              {transaction.akahuCategoryName &&
+                fact(
+                  <>
+                    Bank&apos;s own label{" "}
+                    <span className="tip" title="Akahu's category. Shown for reference, never used for your budget.">
+                      ?
+                    </span>
+                  </>,
+                  transaction.akahuCategoryName,
+                )}
+              {fact(
+                "Category decided by",
+                <Provenance
+                  source={transaction.categorySource}
+                  hasCategory={transaction.category !== null}
+                />,
+              )}
+              {transaction.transferPairId &&
+                fact("Transfer", "Paired: nets to zero, so it's neither income nor spending")}
+            </dl>
+          </section>
         )}
 
-        <NotesForm id={transaction.id} notes={transaction.notes} />
+        <div className="stack" style={{ gap: 20 }}>
+          {book ? (
+            <CategoryForm
+              id={transaction.id}
+              categoryId={transaction.category?.id ?? null}
+              categories={options.categories}
+              bookName={bookName}
+              source={transaction.categorySource}
+            />
+          ) : (
+            <section className="banner" aria-label="Category">
+              <Icon name="warn" />
+              <div>
+                <p className="bt">No categories until this account has a book</p>
+                <p className="bb">
+                  {transaction.account.name} hasn&apos;t been assigned to a book yet. Run{" "}
+                  <code className="mono">npm run accounts:map</code> first: guessing the
+                  book is how business spending ends up in the personal ledger.
+                </p>
+              </div>
+            </section>
+          )}
+
+          <NotesForm id={transaction.id} notes={transaction.notes} />
+
+          <p className="t-xs ink3">
+            There&apos;s no delete. What the bank sent stays on record so every total
+            can be traced. Wrong category? Change it.
+          </p>
+        </div>
       </div>
     </AppShell>
   );

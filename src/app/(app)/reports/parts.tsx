@@ -1,22 +1,31 @@
-// The chrome every reports screen shares: the year selector, the completeness
-// warnings, and the link that carries the current range onto another screen.
+// The chrome every reports screen shares: the year selector, the FY chip, the
+// completeness warnings, and the links between the four reports.
 //
-// A file of its own rather than three copies, because §5 of the 3c spec makes
+// A file of its own rather than four copies, because §5 of the 3c spec makes
 // the warnings a requirement on *every* reports screen, not just the index —
-// and a requirement repeated in three places is a requirement that will end up
-// worded three ways and wired to three different date ranges. The count and
+// and a requirement repeated in four places is a requirement that will end up
+// worded four ways and wired to four different date ranges. The count and
 // the list behind it have to describe the same window, or a cleared queue
 // still shows six.
+//
+// The FY is drawn as a square tab with a bookmark (`.cal.fy`), never the pay
+// period's round pill: the two calendars must not be readable as one.
 //
 // Server components. Everything here is links, so the section keeps working
 // with JavaScript disabled.
 
 import Link from "next/link";
 import type { Book } from "@/generated/prisma/client";
-import { Alert } from "@/components/ui/primitives";
+import { Alert, CalendarChip } from "@/components/ui/primitives";
 import { withBook } from "@/components/ui/nav";
+import { nzDate } from "@/lib/budget/period";
 import { type FinancialYear, rangeQuery } from "@/lib/reports/fy";
 import type { DataQuality } from "@/lib/reports/query";
+
+/** "2026/27" — how a person says FY2027 out loud. */
+export function fyShort(fy: FinancialYear): string {
+  return `${fy.year - 1}/${String(fy.year).slice(2)}`;
+}
 
 /**
  * The financial-year selector: one link per selectable year.
@@ -36,30 +45,30 @@ export function FyLinks({
   basePath: string;
 }) {
   return (
-    <div className="mb-head-actions">
-      {years.map((year) => {
-        const isActive = year.year === current.year;
-        return (
-          <Link
-            key={year.year}
-            href={withBook(`${basePath}?fy=${year.year}`, book)}
-            aria-current={isActive ? "page" : undefined}
-            style={{
-              padding: "6px 12px",
-              borderRadius: "var(--radius-full)",
-              border: "1px solid var(--border-default)",
-              fontSize: "var(--text-xs)",
-              fontWeight: "var(--weight-medium)",
-              textDecoration: "none",
-              background: isActive ? "var(--surface-card-raised)" : "transparent",
-              color: isActive ? "var(--text-primary)" : "var(--text-muted)",
-            }}
-          >
-            {year.label}
-          </Link>
-        );
-      })}
+    <div className="seg" role="group" aria-label="Financial year">
+      {years.map((year) => (
+        <Link
+          key={year.year}
+          href={withBook(`${basePath}?fy=${year.year}`, book)}
+          aria-current={year.year === current.year ? "true" : undefined}
+        >
+          {fyShort(year)}
+        </Link>
+      ))}
     </div>
+  );
+}
+
+/** The FY chip: which year, its full dates, and how far into it the data runs. */
+export function FyChip({ fy, rangeEnd }: { fy: FinancialYear; rangeEnd: Date }) {
+  const partial = rangeEnd.getTime() < fy.end.getTime();
+  return (
+    <span style={{ alignSelf: "flex-start" }}>
+      <CalendarChip kind="fy" label={`FY ${fyShort(fy)}`}>
+        {fy.range}
+        {partial ? ` · to date ${nzDate(rangeEnd)}` : ""}
+      </CalendarChip>
+    </span>
   );
 }
 
@@ -81,40 +90,45 @@ export function QualityAlerts({
   book,
   fy,
   rangeEnd,
+  nameBook = false,
 }: {
   quality: DataQuality;
   book: Book;
   fy: FinancialYear;
   rangeEnd: Date;
+  /** Say which book in the title: on the IR3 pack both books' alerts stack. */
+  nameBook?: boolean;
 }) {
   const { uncategorisedCount: uncategorised, unassignedAccountCount: unmapped } =
     quality;
+  const which = nameBook ? (book === "BUSINESS" ? "business " : "personal ") : "";
 
   return (
     <>
       {uncategorised > 0 && (
-        <Alert level="warning">
-          {uncategorised} transaction{uncategorised === 1 ? "" : "s"} in this
-          range {uncategorised === 1 ? "has" : "have"} no category, so{" "}
-          {uncategorised === 1 ? "it is" : "they are"} missing from every figure
-          on this screen.{" "}
-          <Link
-            href={withBook(
-              `/transactions?uncategorised=1&${rangeQuery(fy, rangeEnd)}`,
-              book,
-            )}
-          >
-            Categorise them
-          </Link>
-          .
+        <Alert
+          title={`${uncategorised} ${which}transaction${uncategorised === 1 ? " needs" : "s need"} a category`}
+          affects={`Understates: money in and money out for FY ${fyShort(fy)}`}
+          actions={
+            <Link
+              className="btn sm"
+              href={withBook(`/transactions?uncategorised=1&${rangeQuery(fy, rangeEnd)}`, book)}
+            >
+              Categorise them
+            </Link>
+          }
+        >
+          {uncategorised === 1 ? "It's" : "They're"} missing from every figure on
+          this screen.
         </Alert>
       )}
 
       {unmapped > 0 && (
-        <Alert level="warning">
-          {unmapped} account{unmapped === 1 ? " is" : "s are"} not assigned to a
-          set of books, so nothing in {unmapped === 1 ? "it" : "them"} appears in
-          any report. Run <code>npm run accounts:map</code>.
+        <Alert
+          title={`${unmapped} account${unmapped === 1 ? " isn't" : "s aren't"} assigned to a book`}
+          affects="Missing: everything in it, from every report"
+        >
+          Run <code className="mono">npm run accounts:map</code>.
         </Alert>
       )}
     </>
@@ -122,7 +136,7 @@ export function QualityAlerts({
 }
 
 /**
- * Links between the three reports screens.
+ * Links between the four reports screens.
  *
  * They carry the selected year and book, because a reader who has chosen
  * FY2026 and then opens the category breakdown has not asked to go back to
@@ -146,39 +160,16 @@ export function ReportLinks({
   ] as const;
 
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: 8,
-        flexWrap: "wrap",
-        fontFamily: "var(--font-sans)",
-      }}
-    >
-      {links.map((link) => {
-        const isActive = link.key === active;
-        return (
-          <Link
-            key={link.key}
-            href={withBook(`${link.href}?fy=${fy.year}`, book)}
-            aria-current={isActive ? "page" : undefined}
-            style={{
-              padding: "8px 14px",
-              minHeight: 36,
-              display: "inline-flex",
-              alignItems: "center",
-              borderRadius: "var(--radius-md)",
-              border: "1px solid var(--border-default)",
-              fontSize: "var(--text-sm)",
-              fontWeight: "var(--weight-medium)",
-              textDecoration: "none",
-              background: isActive ? "var(--surface-card-raised)" : "transparent",
-              color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
-            }}
-          >
-            {link.label}
-          </Link>
-        );
-      })}
-    </div>
+    <nav className="seg" aria-label="Reports" style={{ alignSelf: "flex-start", flexWrap: "wrap" }}>
+      {links.map((link) => (
+        <Link
+          key={link.key}
+          href={withBook(`${link.href}?fy=${fy.year}`, book)}
+          aria-current={link.key === active ? "true" : undefined}
+        >
+          {link.label}
+        </Link>
+      ))}
+    </nav>
   );
 }

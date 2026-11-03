@@ -1,10 +1,10 @@
 // Form controls.
 //
-// The design system's originals hold their state in React. These are rebuilt
-// as native inputs styled entirely by CSS (`:checked`, `:focus-within` — see
-// globals.css), which is what lets the budget screens submit a whole form of
-// amounts, toggles and choices with no client JavaScript at all. Every one of
-// them still works with scripting disabled, which is the standard the Phase 3a
+// Native inputs styled entirely by design.css (`.inp`, `.money-inp`,
+// `.radio-seg`, `.switch`, with `:has(:checked)` for the selected states),
+// which is what lets the budget screens submit a whole form of amounts,
+// toggles and choices with no client JavaScript at all. Every one of them
+// still works with scripting disabled, which is the standard the Phase 3a
 // spec set for the transactions bulk action.
 
 import type { ReactNode } from "react";
@@ -32,7 +32,7 @@ export function TextField({
 }) {
   return (
     <input
-      className="mb-input"
+      className="inp"
       id={id}
       name={name}
       type={type}
@@ -66,6 +66,7 @@ export function AmountField({
   name: string;
   id?: string;
   valueCents: number;
+  /** Width of the digits; the $ and padding are added to it. */
   width?: number;
   dp?: 0 | 2;
   invalid?: boolean;
@@ -75,23 +76,29 @@ export function AmountField({
   const shown = dp === 2 ? dollars.toFixed(2) : String(Math.round(dollars));
 
   return (
-    <span className="mb-amount" data-invalid={invalid || undefined}>
-      <span aria-hidden="true">$</span>
+    <span
+      className="money-inp"
+      data-invalid={invalid || undefined}
+      style={{ width: width + 64, maxWidth: "100%" }}
+    >
+      <span className="cur" aria-hidden="true">
+        $
+      </span>
       <input
+        className="inp"
         id={id}
         name={name}
         inputMode="decimal"
         defaultValue={shown}
         aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
-        style={{ width }}
       />
     </span>
   );
 }
 
 /**
- * A row of mutually exclusive pills backed by real radio inputs.
+ * A row of mutually exclusive options backed by real radio inputs.
  *
  * Used for the month-end keep/carry/match decision. Native radios mean the
  * whole review screen is one form with one submit — no per-row round trip, no
@@ -109,16 +116,16 @@ export function ChoiceGroup({
   label: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="mb-choices">
+    <div role="radiogroup" aria-label={label} className="radio-seg">
       {options.map((option) => (
-        <label key={option.value} className="mb-choice" title={option.hint}>
+        <label key={option.value} title={option.hint}>
           <input
             type="radio"
             name={name}
             value={option.value}
             defaultChecked={value === option.value}
           />
-          <span>{option.label}</span>
+          {option.label}
         </label>
       ))}
     </div>
@@ -138,15 +145,10 @@ export function SwitchField({
   value?: string;
 }) {
   return (
-    <label className="mb-switch">
-      <input
-        type="checkbox"
-        name={name}
-        value={value}
-        defaultChecked={defaultChecked}
-      />
-      <span className="mb-switch-track" aria-hidden="true" />
-      {label && <span className="mb-switch-label">{label}</span>}
+    <label className="switch" style={{ position: "relative", cursor: "pointer" }}>
+      <input type="checkbox" name={name} value={value} defaultChecked={defaultChecked} />
+      <span className="tr" aria-hidden="true" />
+      {label && <span>{label}</span>}
     </label>
   );
 }
@@ -169,7 +171,7 @@ export function SelectField({
 }) {
   return (
     <select
-      className="mb-select"
+      className="inp"
       id={id}
       name={name}
       defaultValue={value ?? (placeholder ? "" : undefined)}

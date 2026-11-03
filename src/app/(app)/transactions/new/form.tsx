@@ -6,14 +6,18 @@
 // the feed can see the money leave the account and has no idea where it went,
 // so the only way that spending ever reaches a category is somebody typing it.
 //
-// The category list is not filtered client-side when the book radio changes.
+// The category list is not filtered client-side when the book choice changes.
 // It carries both books' categories with the book in each option's label, and
 // the server re-checks that the chosen category matches the chosen book
 // (spec §4c) and rejects a mismatch. Filtering in the browser would be a
 // nicer list and exactly as unsafe, since a direct POST skips the browser.
+//
+// Book and direction are radios dressed as segmented controls (design.css
+// `.radio-seg`), so the choice is visible and the form posts with no script.
 
+import Link from "next/link";
 import { useActionState } from "react";
-import { Button, Card, FormField } from "@/components/ui/primitives";
+import { Button, FormField, Icon } from "@/components/ui/primitives";
 import { TextField } from "@/components/ui/form";
 import { createManualAction, type FormState } from "../actions";
 
@@ -21,10 +25,12 @@ export function ManualEntryForm({
   book,
   today,
   categories,
+  cancelHref,
 }: {
   book: "PERSONAL" | "BUSINESS";
   today: string;
   categories: { id: string; name: string; book: string }[];
+  cancelHref: string;
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     createManualAction,
@@ -38,90 +44,135 @@ export function ManualEntryForm({
   // identical failures still re-seed rather than the key staying equal.
   const was = state?.values ?? {};
   const seed = (field: string, fallback = ""): string => was[field] ?? fallback;
+  const chosenBook = seed("book", book);
+  const direction = seed("direction", "out");
 
   return (
-    <Card title="New cash entry">
-      <form
-        key={state?.attempt ?? 0}
-        action={formAction}
-        style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}
-      >
-        <FormField label="Which book" hint="Decides which Cash account it lands in, and which categories it may use.">
-          <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap" }}>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: "var(--text-sm)" }}>
-              <input type="radio" name="book" value="PERSONAL" defaultChecked={seed("book", book) !== "BUSINESS"} />
-              Personal
-            </label>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: "var(--text-sm)" }}>
-              <input type="radio" name="book" value="BUSINESS" defaultChecked={seed("book", book) === "BUSINESS"} />
-              Business
-            </label>
-          </div>
-        </FormField>
-
-        <FormField label="Date" htmlFor="date">
-          <input className="mb-input" id="date" type="date" name="date" defaultValue={seed("date", today)} />
-        </FormField>
-
-        <FormField
-          label="Description"
-          htmlFor="description"
-          required
-          hint="What it was. This is the only thing you will have to recognise it by later."
-        >
-          <TextField id="description" name="description" defaultValue={seed("description")} placeholder="Firewood from the roadside stall" />
-        </FormField>
-
-        <FormField label="Payee" htmlFor="payee">
-          <TextField id="payee" name="payee" defaultValue={seed("payee")} placeholder="Optional" />
-        </FormField>
-
-        <FormField label="Amount" htmlFor="amount" error={state?.error}>
-          <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" }}>
-            <span style={{ flex: "1 1 140px" }}>
-              <TextField id="amount" name="amount" defaultValue={seed("amount")} placeholder="40.00" />
-            </span>
-            <select
-              className="mb-input"
-              name="direction"
-              defaultValue={seed("direction", "out")}
-              aria-label="Money in or out"
-              style={{ flex: "0 1 140px" }}
-            >
-              <option value="out">Money out</option>
-              <option value="in">Money in</option>
-            </select>
-          </div>
-        </FormField>
-
-        <FormField label="Category" htmlFor="categoryId">
-          <select className="mb-input" id="categoryId" name="categoryId" defaultValue={seed("categoryId")}>
-            <option value="">— decide later —</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name} ({category.book === "BUSINESS" ? "business" : "personal"})
-              </option>
-            ))}
-          </select>
-        </FormField>
-
-        <FormField label="Notes" htmlFor="notes">
-          <textarea
-            className="mb-input"
-            id="notes"
-            name="notes"
-            rows={2}
-            defaultValue={seed("notes")}
-            style={{ resize: "vertical", fontFamily: "var(--font-sans)" }}
-          />
-        </FormField>
-
-        <div>
-          <Button type="submit" variant="primary" size="sm" disabled={pending}>
-            {pending ? "Saving…" : "Save entry"}
-          </Button>
+    <form
+      key={state?.attempt ?? 0}
+      action={formAction}
+      className="card pad-l stack"
+      style={{ gap: 18 }}
+    >
+      <div className="field">
+        <span className="flabel" id="book-label">
+          Book
+        </span>
+        <div className="radio-seg" role="radiogroup" aria-labelledby="book-label" style={{ display: "flex" }}>
+          <label style={{ flex: 1, justifyContent: "center" }}>
+            <input type="radio" name="book" value="PERSONAL" defaultChecked={chosenBook !== "BUSINESS"} />
+            <span className="bk p" aria-hidden="true" />
+            Personal
+          </label>
+          <label style={{ flex: 1, justifyContent: "center" }}>
+            <input type="radio" name="book" value="BUSINESS" defaultChecked={chosenBook === "BUSINESS"} />
+            <span className="bk b" aria-hidden="true" />
+            Business · Tommy Tinkers
+          </label>
         </div>
-      </form>
-    </Card>
+        <span className="hint">Decides which Cash account it lands in, and which categories it may use.</span>
+      </div>
+
+      <div className="grid cols-2" style={{ gap: 14 }}>
+        <FormField label="Date" htmlFor="date">
+          <input className="inp" id="date" type="date" name="date" defaultValue={seed("date", today)} />
+        </FormField>
+        <div className="field">
+          <span className="flabel" id="dir-label">
+            In or out
+          </span>
+          <div className="radio-seg" role="radiogroup" aria-labelledby="dir-label" style={{ display: "flex" }}>
+            <label style={{ flex: 1, justifyContent: "center" }}>
+              <input type="radio" name="direction" value="out" defaultChecked={direction !== "in"} />
+              <Icon name="out" size="sm" />
+              Out
+            </label>
+            <label style={{ flex: 1, justifyContent: "center" }}>
+              <input type="radio" name="direction" value="in" defaultChecked={direction === "in"} />
+              <Icon name="in" size="sm" />
+              In
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <FormField
+        label="Description"
+        htmlFor="description"
+        required
+        hint="What it was. This is the only thing you'll have to recognise it by later."
+      >
+        <TextField
+          id="description"
+          name="description"
+          defaultValue={seed("description")}
+          placeholder="Firewood from the roadside stall"
+        />
+      </FormField>
+
+      <FormField label="Payee" htmlFor="payee">
+        <TextField id="payee" name="payee" defaultValue={seed("payee")} placeholder="Optional" />
+      </FormField>
+
+      <FormField
+        label="Amount"
+        htmlFor="amount"
+        error={state?.error}
+        hint={'Always positive. "In" or "Out" sets the direction.'}
+      >
+        <span className="money-inp">
+          <span className="cur" aria-hidden="true">
+            $
+          </span>
+          <input
+            className="inp"
+            id="amount"
+            name="amount"
+            inputMode="decimal"
+            defaultValue={seed("amount")}
+            placeholder="40.00"
+          />
+        </span>
+      </FormField>
+
+      <FormField
+        label={
+          <>
+            Category <span className="ink3" style={{ fontWeight: 400 }}>· optional</span>
+          </>
+        }
+        htmlFor="categoryId"
+        hint="Must belong to the book chosen above. A mismatch is refused, not guessed."
+      >
+        <select className="inp" id="categoryId" name="categoryId" defaultValue={seed("categoryId")}>
+          <option value="">— decide later —</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name} ({category.book === "BUSINESS" ? "business" : "personal"})
+            </option>
+          ))}
+        </select>
+      </FormField>
+
+      <FormField label="Notes" htmlFor="notes">
+        <textarea
+          className="inp"
+          id="notes"
+          name="notes"
+          rows={2}
+          defaultValue={seed("notes")}
+          style={{ minHeight: 72, padding: "12px 14px", resize: "vertical" }}
+        />
+      </FormField>
+
+      <div className="row wrap">
+        <Button type="submit" variant="primary" disabled={pending}>
+          {pending ? "Saving…" : "Add entry"}
+        </Button>
+        <Link className="btn quiet" href={cancelHref}>
+          Cancel
+        </Link>
+      </div>
+    </form>
   );
 }

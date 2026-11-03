@@ -3,10 +3,12 @@
 // The "confirm all in this group" button.
 //
 // A client component for `useActionState` only — the form is a hidden field
-// and a submit, so it works with JavaScript disabled.
+// and a submit, so it works with JavaScript disabled. The server re-derives
+// which pairs the group holds; the button carries a confidence level, never
+// a list of ids (invariant 6).
 
 import { useActionState } from "react";
-import { Button, FormField } from "@/components/ui/primitives";
+import { Button } from "@/components/ui/primitives";
 import { confirmGroupAction, type FormState } from "./actions";
 
 export function ConfirmGroupForm({
@@ -22,26 +24,29 @@ export function ConfirmGroupForm({
   );
 
   return (
-    <form action={formAction}>
+    <form action={formAction} className="stack" style={{ gap: 6, alignItems: "flex-end" }}>
       <input type="hidden" name="confidence" value={confidence} />
 
-      <Button type="submit" variant="primary" size="sm" disabled={pending || count === 0}>
-        {pending ? "Pairing…" : `Confirm all ${count}`}
+      <Button
+        type="submit"
+        variant={confidence === "HIGH" ? "primary" : "secondary"}
+        size="sm"
+        disabled={pending || count === 0}
+      >
+        <span className="i i-check sm" aria-hidden="true" />
+        {pending ? "Pairing…" : `Confirm ${count} ${confidence.toLowerCase()}`}
       </Button>
 
-      {state && (
-        <div style={{ marginTop: "var(--space-3)" }}>
-          {state.ok ? (
-            <span style={{ fontSize: "var(--text-xs)", color: "var(--status-ok)" }}>
-              Paired {state.wrote}. Both legs of each now net to zero.
-            </span>
-          ) : (
-            <FormField error={state.error}>
-              <span />
-            </FormField>
-          )}
-        </div>
-      )}
+      {state &&
+        (state.ok ? (
+          <span className="t-xs" style={{ color: "var(--good)" }}>
+            Paired {state.wrote}. Both legs of each now net to zero.
+          </span>
+        ) : (
+          <span className="err-t" role="alert">
+            {state.error}
+          </span>
+        ))}
     </form>
   );
 }

@@ -191,14 +191,15 @@ A good finding here is "this new pure function has a branch nothing covers", not
 
 ## Deliberate decisions — do not flag these
 
-- **Dark theme only.** No `prefers-color-scheme`, no light palette. The app
-  renders balances in a room at night.
-- **Inline styles in components.** Chosen so the design-system primitives stay
-  portable against the design project they are pulled from. Only three components
-  use a stylesheet.
-- **Design tokens keep their original names** (`--surface-card`,
-  `--text-primary`) rather than Tailwind's, so CSS pulled from the design project
-  applies verbatim and stays diffable.
+- **Two themes, picked by the OS.** `prefers-color-scheme` chooses light or
+  dark; there is no in-app switch to get out of step with it.
+- **`src/app/design.css` is a near-verbatim copy of the design canvas's
+  stylesheet**, generic class names (`.card`, `.row`, `.grid`) and all, so the
+  next pull from the design is a diff rather than a re-translation. Changes to
+  it are marked `App:`. Don't flag its class names as too generic.
+- **Legacy token names survive as aliases** (`--surface-card`,
+  `--text-primary` in `globals.css`), mapped onto the new tokens so any style
+  still written against them follows the theme.
 - **`src/proxy.ts`, not `middleware.ts`.** This Next.js version renamed the file
   convention.
 - **No rate limiting or lockout on login.** Single user, LAN/Tailscale only,

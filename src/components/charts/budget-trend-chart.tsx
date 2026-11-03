@@ -96,16 +96,19 @@ function useMounted() {
  * that were available all along.
  */
 function readTokens() {
-  const style = getComputedStyle(document.documentElement);
+  // <body>, not <html>: the theme tokens live on `.mb`, which is the body,
+  // so they (and whichever theme the OS picked) resolve there and not above.
+  const style = getComputedStyle(document.body);
   const read = (name: string, fallback: string) =>
     style.getPropertyValue(name).trim() || fallback;
 
   return {
-    out: read("--money-out", FALLBACK.out),
-    line: read("--text-secondary", FALLBACK.line),
-    grid: read("--border-subtle", FALLBACK.grid),
-    text: read("--text-muted", FALLBACK.text),
-    card: read("--surface-card-raised", FALLBACK.card),
+    // Spent bars in the accent, budget as an ink-3 line: the canvas's vbars.
+    out: read("--accent", FALLBACK.out),
+    line: read("--ink-3", FALLBACK.line),
+    grid: read("--line", FALLBACK.grid),
+    text: read("--ink-3", FALLBACK.text),
+    card: read("--surface", FALLBACK.card),
   };
 }
 

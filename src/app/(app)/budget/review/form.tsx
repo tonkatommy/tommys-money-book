@@ -6,13 +6,16 @@
 // round trip and no client state to lose. The island exists for the inline
 // error and the pending label only; with JavaScript off, every choice still
 // posts and applies.
+//
+// Each option is labelled with the budget it would give this period, so the
+// consequence of a choice is readable before it's made, with no script
+// recalculating a column as you click.
 
 import { useActionState } from "react";
-import { Badge, Button, Card, CategoryTag, FormField } from "@/components/ui/primitives";
+import { Button, FormField } from "@/components/ui/primitives";
 import { ChoiceGroup } from "@/components/ui/form";
-import { PaceBar } from "@/components/ui/data";
 import { formatNZD, formatNZDWhole } from "@/lib/money";
-import { monthEndAmounts } from "@/lib/budget/totals";
+import { allowanceCents, monthEndAmounts } from "@/lib/budget/totals";
 import type { ReviewLine } from "@/lib/budget/query";
 import { applyMonthEndAction, type FormState } from "../actions";
 
@@ -20,10 +23,15 @@ export function ReviewForm({
   book,
   periodStart,
   lines,
+  applyLabel,
+  trendsHref,
 }: {
   book: string;
   periodStart: string;
   lines: ReviewLine[];
+  /** "Apply to 20/10 – 19/11". */
+  applyLabel: string;
+  trendsHref: string;
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     applyMonthEndAction,
@@ -31,89 +39,45 @@ export function ReviewForm({
   );
 
   return (
-    <form action={formAction}>
+    <form action={formAction} className="stack" style={{ gap: 16 }}>
       <input type="hidden" name="book" value={book} />
       <input type="hidden" name="periodStart" value={periodStart} />
 
-      <Card
-        title="One decision each"
-        padded={false}
-        action={
-          <Button type="submit" variant="primary" size="sm" disabled={pending}>
-            {pending ? "Applying…" : "Apply to this period"}
-          </Button>
-        }
-      >
-        <div className="mb-rows">
-          {state?.error && (
-            <div style={{ paddingBottom: "var(--space-4)" }}>
-              <FormField error={state.error}>
-                <span />
-              </FormField>
-            </div>
-          )}
+      {state?.error && (
+        <FormField error={state.error}>
+          <span />
+        </FormField>
+      )}
 
-          {lines.map((line) => {
-            const differenceCents = line.budgetCents - line.spentCents;
-            const amounts = monthEndAmounts(line.budgetCents, line.spentCents);
+      <section className="txl" aria-label="Decisions">
+        <div className="blh rv">
+          <span>Category · budget vs spent</span>
+          <span>Decision · budget it gives this period</span>
+          <span style={{ textAlign: "right" }}>Difference</span>
+        </div>
+        {lines.map((line) => {
+          const differenceCents = line.budgetCents - line.spentCents;
+          const amounts = monthEndAmounts(line.budgetCents, line.spentCents);
+          const carried = allowanceCents(
+            amounts.carry.amountCents,
+            amounts.carry.carryoverCents,
+          );
 
-            return (
-              <div key={line.categoryId} className="mb-row mb-decide">
-                <input
-                  type="hidden"
-                  name={`budget:${line.categoryId}`}
-                  value={line.budgetCents}
-                />
-                <input
-                  type="hidden"
-                  name={`spent:${line.categoryId}`}
-                  value={line.spentCents}
-                />
+          return (
+            <div key={line.categoryId} className="bl rv">
+              <input type="hidden" name={`budget:${line.categoryId}`} value={line.budgetCents} />
+              <input type="hidden" name={`spent:${line.categoryId}`} value={line.spentCents} />
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <CategoryTag name={line.name} book={line.book} />
-                    <span
-                      className="mb-num"
-                      style={{
-                        fontSize: "var(--text-xs)",
-                        color:
-                          differenceCents >= 0
-                            ? "var(--status-ok)"
-                            : "var(--status-error)",
-                      }}
-                    >
-                      {formatNZD(Math.abs(differenceCents))}{" "}
-                      {differenceCents >= 0 ? "under" : "over"}
-                    </span>
-                    <span
-                      className="mb-num"
-                      style={{
-                        fontSize: "var(--text-xs)",
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      {formatNZD(line.spentCents)} of{" "}
-                      {formatNZDWhole(line.budgetCents)}
-                    </span>
-                    {line.budgetedThisPeriod && <Badge tone="ok">budgeted</Badge>}
-                  </div>
+              <span className="bl-n">
+                <span className="semi">{line.name}</span>
+                <span className="t-xs ink2">
+                  <span className="num">{formatNZDWhole(line.budgetCents)}</span> budget ·{" "}
+                  <span className="num">{formatNZD(line.spentCents)}</span> spent
+                  {line.budgetedThisPeriod ? " · already set this period" : ""}
+                </span>
+              </span>
 
-                  <div style={{ maxWidth: 340 }}>
-                    <PaceBar
-                      spentCents={line.spentCents}
-                      budgetCents={line.budgetCents}
-                    />
-                  </div>
-                </div>
-
+              <span className="bl-t">
                 <ChoiceGroup
                   name={`choice:${line.categoryId}`}
                   label={`What to do with ${line.name}`}
@@ -125,24 +89,49 @@ export function ReviewForm({
                     },
                     {
                       value: "carry",
-                      label:
+                      label: `${differenceCents >= 0 ? "Carry" : "Repay"} → ${formatNZDWhole(carried)}`,
+                      hint:
                         differenceCents >= 0
-                          ? `Carry +${formatNZDWhole(differenceCents)}`
-                          : `Repay ${formatNZDWhole(Math.abs(differenceCents))}`,
-                      hint: "Same budget, with the difference rolled into this period's allowance.",
+                          ? `Adds the ${formatNZD(differenceCents)} underspend, this period only.`
+                          : `Pays back the ${formatNZD(-differenceCents)} overspend, this period only.`,
                     },
                     {
                       value: "match",
                       label: `Match ${formatNZDWhole(amounts.match.amountCents)}`,
-                      hint: "Set the budget to what you actually spend.",
+                      hint: "Set the budget to what you actually spent, from now on.",
                     },
                   ]}
                 />
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+              </span>
+
+              <span className="bl-a" style={{ textAlign: "right" }}>
+                <span
+                  className={`delta ${differenceCents >= 0 ? "ahead" : "behind"}`}
+                  style={{ fontSize: 13, padding: "3px 9px" }}
+                >
+                  {differenceCents === 0
+                    ? "On budget"
+                    : `${formatNZD(Math.abs(differenceCents))} ${differenceCents > 0 ? "under" : "over"}`}
+                </span>
+              </span>
+            </div>
+          );
+        })}
+      </section>
+
+      <div className="savebar">
+        <span className="t-s ink2">
+          A category left undecided keeps its budget as it is.
+        </span>
+        <span className="row">
+          <a className="btn quiet" href={trendsHref}>
+            See trends first
+          </a>
+          <Button type="submit" variant="primary" disabled={pending}>
+            {pending ? "Applying…" : applyLabel}
+          </Button>
+        </span>
+      </div>
     </form>
   );
 }

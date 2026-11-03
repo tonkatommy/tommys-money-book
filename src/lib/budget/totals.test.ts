@@ -15,6 +15,7 @@ import { payPeriodFor, utcDate } from "./period";
 import {
   allowanceCents,
   budgetTotals,
+  linePaceDeltaCents,
   monthEndAmounts,
   type BudgetLine,
 } from "./totals";
@@ -254,5 +255,29 @@ describe("monthEndAmounts", () => {
 
   it("carries a surplus forward as a positive", () => {
     expect(monthEndAmounts(15_000, 11_820).carry.carryoverCents).toBe(3_180);
+  });
+});
+
+describe("linePaceDeltaCents", () => {
+  it("agrees with the headline pace delta for a single line", () => {
+    const one = line({ budgetCents: 72000, spentCents: 61140 });
+    const totals = budgetTotals([one], 0, period);
+    expect(linePaceDeltaCents(one, period)).toBe(totals.paceDeltaCents);
+  });
+
+  it("is negative when spending is ahead of even pace", () => {
+    expect(linePaceDeltaCents({ budgetCents: 10000, spentCents: 9000 }, { elapsed: 0.5 })).toBe(
+      -4000,
+    );
+  });
+
+  it("is positive when under pace", () => {
+    expect(linePaceDeltaCents({ budgetCents: 10000, spentCents: 1000 }, { elapsed: 0.5 })).toBe(
+      4000,
+    );
+  });
+
+  it("has no pace without a budget, rather than 'behind' by the whole spend", () => {
+    expect(linePaceDeltaCents({ budgetCents: 0, spentCents: 3780 }, { elapsed: 0.5 })).toBeNull();
   });
 });

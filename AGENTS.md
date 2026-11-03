@@ -97,12 +97,16 @@ the code-review skill.
   blank good fields.
 - Book selection lives in the query string (`?book=BUSINESS`), so the toggle is
   two links and needs no client state.
-- Dark theme only, `en-NZ`, NZD, no i18n.
-- Design tokens keep their original prototype names (`--surface-card`,
-  `--text-primary`), with Tailwind `@theme` aliases layered on, so CSS pulled
-  from the design project applies verbatim.
-- Inline styles in components are deliberate, for portability against that
-  design project.
+- Light and dark themes, chosen by the OS (`prefers-color-scheme`), `en-NZ`,
+  NZD, no i18n.
+- The look lives in `src/app/design.css`, a near-verbatim port of the Money
+  Book design canvas's stylesheet, with its class names (`.card`, `.banner`,
+  `.pace`) and tokens (`--paper`, `--ink`) kept as the canvas has them, so the
+  next pull from the design applies as a diff. Departures are marked `App:` in
+  that file. Components emit those classes; the old token names
+  (`--surface-card`, `--text-primary`) survive in `globals.css` only as aliases.
+- Every total carries its date range, every category says who decided it
+  (rule, hand or transfer), and missing data renders as missing, never `$0.00`.
 - Categories and rules are code (`src/lib/categories/definitions.ts` plus
   `categories:seed`), not editable from the UI. A recurring fix gets a rule; a
   one-off gets `categories:recat`.

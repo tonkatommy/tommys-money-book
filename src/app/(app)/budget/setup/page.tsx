@@ -1,20 +1,18 @@
 // Set the budget.
 //
-// One form, one Save. Amounts are native inputs, the fixed-bill pins are
-// checkboxes and the pay cycle is its own small form — so the whole screen
-// submits without a line of client JavaScript. The only interactive island is
-// the submit button's pending state.
+// One form, one Save. Amounts are native inputs, Everyday/Fixed is a pair of
+// radios per line and the pay cycle is its own small form — so the whole
+// screen submits without a line of client JavaScript. The only interactive
+// islands are the submit buttons' pending states.
+//
+// Layout follows the Money Book canvas (SetBudget.dc.html): bill and category
+// lines on the left, the plan's arithmetic and the pay cycle on the right.
 
 import { AppShell } from "@/components/app-shell";
-import {
-  Badge,
-  Card,
-  CategoryTag,
-  StatusDot,
-} from "@/components/ui/primitives";
-import { Figure, PaceBar, ScreenHead } from "@/components/ui/data";
-import { formatNZD, formatNZDWhole } from "@/lib/money";
-import { shortDate } from "@/lib/budget/period";
+import { Alert, CalendarChip, Icon } from "@/components/ui/primitives";
+import { withBook } from "@/components/ui/nav";
+import { formatNZD } from "@/lib/money";
+import { nzDate } from "@/lib/budget/period";
 import {
   getBudgetView,
   parseBook,
@@ -53,19 +51,26 @@ export default async function SetupPage({
 
   const flexible = categories.filter((c) => !c.isFixed);
   const fixed = categories.filter((c) => c.isFixed);
-
-  const plannedCents = categories.reduce(
-    (sum, category) =>
-      sum + (seedFromAverages ? category.averageCents : category.standingCents),
-    0,
-  );
-  const spareCents = view.averageIncomeCents - plannedCents;
+  const planned = (list: typeof categories) =>
+    list.reduce(
+      (sum, c) => sum + (seedFromAverages ? c.averageCents : c.standingCents),
+      0,
+    );
+  const fixedCents = planned(fixed);
+  const flexCents = planned(flexible);
+  const unplannedCents = view.averageIncomeCents - fixedCents - flexCents;
 
   // Detected bills the reader hasn't pinned yet — the "we found these" list.
   const unpinned = [...suggestions.values()].filter((suggestion) => {
     const category = categories.find((c) => c.categoryId === suggestion.categoryId);
     return category && !category.isFixed;
   });
+  const unpinnedCents = unpinned.reduce((sum, s) => sum + s.amountCents, 0);
+
+  const discardHref = withBook(
+    params.period ? `/budget/setup?period=${params.period}` : "/budget/setup",
+    book,
+  );
 
   return (
     <AppShell
@@ -76,190 +81,109 @@ export default async function SetupPage({
       preserveQuery={params.period ? `period=${params.period}` : undefined}
       splitFortnightly={settings.splitFortnightly}
     >
-      <div className="mb-stack">
-        <ScreenHead
-          title="Set the budget"
-          sub="Suggestions are your average of the last three pay periods. Change anything — nothing is locked, and every figure can be changed again at month end."
-        />
+      <div className="page-h">
+        <div className="grow stack" style={{ gap: 6 }}>
+          <h1 className="t-xl">Set budget</h1>
+          <span className="t-s ink2">
+            One amount per category, saved together. Amounts carry forward until
+            you change them.
+          </span>
+        </div>
+        <CalendarChip kind="pp" label="From">
+          {nzDate(period.start)} onwards
+        </CalendarChip>
+      </div>
 
-        <Card>
-          <div className="mb-grid mb-grid-3" style={{ gap: "var(--space-5)" }}>
-            <Figure
-              label="Money in each period"
-              value={formatNZD(view.averageIncomeCents)}
-              tone="var(--money-in)"
-            />
-            <Figure label="Budgeted out" value={formatNZDWhole(plannedCents)} />
-            <Figure
-              label={spareCents >= 0 ? "Left over to save" : "Short by"}
-              value={formatNZD(Math.abs(spareCents))}
-              tone={spareCents >= 0 ? "var(--status-ok)" : "var(--status-error)"}
-            />
-          </div>
-
-          {view.averageIncomeCents > 0 && (
-            <div style={{ marginTop: "var(--space-5)" }}>
-              <PaceBar
-                spentCents={plannedCents}
-                budgetCents={view.averageIncomeCents}
-                tone={plannedCents > view.averageIncomeCents ? "error" : "accent"}
-              />
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: "var(--text-xs)",
-                  color: "var(--text-muted)",
-                }}
-              >
-                {Math.round((plannedCents / view.averageIncomeCents) * 100)}% of your
-                income is spoken for.
-              </div>
-            </div>
-          )}
-        </Card>
-
-        <BudgetForm
-          book={book}
-          periodStart={period.start.toISOString().slice(0, 10)}
-          flexible={flexible}
-          fixed={fixed}
-          seedFromAverages={seedFromAverages}
-        />
-
-        <div className="mb-grid mb-grid-setup">
-          <Card
-            title="Bills we found"
-            action={
-              <Badge tone={unpinned.length ? "warning" : "ok"}>
-                {fixed.length} pinned
-              </Badge>
-            }
-          >
-            <p
-              style={{
-                margin: "0 0 var(--space-3)",
-                fontSize: "var(--text-xs)",
-                color: "var(--text-muted)",
-                lineHeight: 1.6,
-              }}
-            >
-              Detected from repeating payments in your feed, matched on the
-              payee and how regularly it lands. Pinned bills are held aside from
-              &ldquo;safe to spend&rdquo; and left out of the pace calculation —
-              pacing a mortgage evenly across a month is a meaningless number.
-            </p>
-
-            {unpinned.map((suggestion) => {
-              const category = categories.find(
-                (c) => c.categoryId === suggestion.categoryId,
-              );
-              if (!category) return null;
-
-              return (
-                <div
-                  key={suggestion.categoryId}
-                  className="mb-row"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    padding: "10px 0",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div
-                      className="mb-truncate"
-                      style={{
-                        fontSize: "var(--text-sm)",
-                        color: "var(--text-primary)",
-                      }}
-                    >
-                      {category.name}
-                    </div>
-                    <div
-                      className="mb-num"
-                      style={{
-                        fontSize: "var(--text-xs)",
-                        color: "var(--text-muted)",
-                        marginTop: 2,
-                      }}
-                    >
-                      {formatNZD(suggestion.amountCents)} · around the{" "}
-                      {suggestion.dueDay}
-                      {suggestion.estimated ? " · amount varies" : ""} ·{" "}
-                      {suggestion.occurrences} times
-                    </div>
-                  </div>
-                  <span
-                    style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}
-                  >
-                    tick &ldquo;bill&rdquo; above to pin
+      <div className="grid cols-side" style={{ gap: 20, alignItems: "start" }}>
+        <div className="stack" style={{ gap: 20 }}>
+          {unpinned.length > 0 && (
+            <section className="txl" aria-label="Detected bills">
+              <div className="grp-h">
+                <span className="stack" style={{ gap: 2 }}>
+                  <span className="sect-t">
+                    <Icon name="cycle" size="sm" />
+                    {unpinned.length} bill{unpinned.length === 1 ? "" : "s"} detected
                   </span>
-                </div>
-              );
-            })}
-
-            {unpinned.length > 0 && (
-              <PinBillsForm
-                book={book}
-                periodStart={period.start.toISOString().slice(0, 10)}
-                count={unpinned.length}
-              />
-            )}
-
-            {unpinned.length === 0 && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-muted)",
-                }}
-              >
-                <StatusDot tone="ok" />
-                Every repeating payment we can see is already pinned.
+                  <span className="t-xs ink2">
+                    Regular amounts around the same day each month. Not counted
+                    as fixed until pinned.
+                  </span>
+                </span>
+                <PinBillsForm
+                  book={book}
+                  periodStart={period.start.toISOString().slice(0, 10)}
+                  count={unpinned.length}
+                />
               </div>
-            )}
-
-            {fixed.length > 0 && (
-              <div
-                style={{
-                  marginTop: "var(--space-4)",
-                  paddingTop: "var(--space-4)",
-                  borderTop: "1px solid var(--border-subtle)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                {fixed.map((category) => (
-                  <div
-                    key={category.categoryId}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 10,
-                    }}
-                  >
-                    <CategoryTag name={category.name} book={category.book} />
-                    <span
-                      className="mb-num"
-                      style={{
-                        fontSize: "var(--text-xs)",
-                        color: "var(--text-tertiary)",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {category.dueDate ? shortDate(category.dueDate) : "no date"}
+              {unpinned.map((suggestion) => {
+                const category = categories.find(
+                  (c) => c.categoryId === suggestion.categoryId,
+                );
+                if (!category) return null;
+                return (
+                  <div key={suggestion.categoryId} className="bl">
+                    <span className="bl-n">
+                      <span className="semi">{category.name}</span>
+                      <span className="range">
+                        Seen {suggestion.occurrences} times
+                        {suggestion.estimated ? " · amount varies" : ""}
+                      </span>
+                    </span>
+                    <span className="bl-t t-xs ink3">
+                      Pinning sets it to Fixed below
+                    </span>
+                    <span className="bl-d t-s ink2">Around day {suggestion.dueDay}</span>
+                    <span className="bl-a m" style={{ textAlign: "right" }}>
+                      {formatNZD(suggestion.amountCents)}
                     </span>
                   </div>
-                ))}
-              </div>
+                );
+              })}
+            </section>
+          )}
+
+          <BudgetForm
+            book={book}
+            periodStart={period.start.toISOString().slice(0, 10)}
+            flexible={flexible}
+            fixed={fixed}
+            seedFromAverages={seedFromAverages}
+            discardHref={discardHref}
+          />
+        </div>
+
+        <aside className="stack" style={{ gap: 20 }}>
+          <section className="card pad-l stack" style={{ gap: 12 }} aria-label="Totals">
+            <span className="lbl">A pay period · planned</span>
+            <div className="eq">
+              <span className="op" />
+              <span>Average pay, last 3 periods</span>
+              <span className="m in">+{formatNZD(view.averageIncomeCents)}</span>
+              <span className="op">−</span>
+              <span>Fixed bills</span>
+              <span className="m">{formatNZD(fixedCents)}</span>
+              <span className="op">−</span>
+              <span>Everyday</span>
+              <span className="m">{formatNZD(flexCents)}</span>
+              <span className="op tot">=</span>
+              <span className="tot">Not yet planned</span>
+              <span className="m tot" style={{ color: unplannedCents < 0 ? "var(--bad)" : undefined }}>
+                {unplannedCents >= 0 ? "+" : "−"}
+                {formatNZD(Math.abs(unplannedCents))}
+              </span>
+            </div>
+            {unpinned.length > 0 && (
+              <p className="t-xs ink3">
+                Detected bills ({formatNZD(unpinnedCents)}) aren&apos;t included
+                until pinned.
+              </p>
             )}
-          </Card>
+            {unplannedCents < 0 && (
+              <p className="t-xs" style={{ color: "var(--bad)" }}>
+                This plan spends more than you usually earn in a period.
+              </p>
+            )}
+          </section>
 
           <PayCycleForm
             anchorDay={settings.anchorDay}
@@ -267,7 +191,12 @@ export default async function SetupPage({
             periodLabel={period.label}
             flexBudgetCents={view.totals.flexBudgetCents}
           />
-        </div>
+
+          <Alert level="info" title="Past periods stay as they were">
+            Changes apply from {nzDate(period.start)}. Reports and How past periods
+            went keep the budget that was set at the time.
+          </Alert>
+        </aside>
       </div>
     </AppShell>
   );

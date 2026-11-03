@@ -1,154 +1,193 @@
 // Navigation. All links, no client state.
 //
-// The prototype drove navigation and the book switch through React state.
-// Here they are real URLs: the sidebar and tab bar are <Link>s, and the book
+// The sidebar, the tab bar and the book toggle are real URLs: the book
 // toggle is two links that differ only by a query parameter. That keeps every
-// budget screen a server component, makes each view bookmarkable, and means
-// the back button does what it looks like it does — the same reasoning the
-// Phase 3a spec applied to the transaction filters.
+// screen a server component, makes each view bookmarkable, and means the back
+// button does what it looks like it does.
+//
+// Markup follows the Money Book canvas (Budget.dc.html): the classes are
+// design.css's, so a change made on the canvas lands here as a class, not a
+// re-derived inline style.
 
 import Link from "next/link";
 import type { Book } from "@/generated/prisma/client";
 
-export type NavItem = {
+type NavLink = {
   key: string;
   href: string;
   label: string;
-  /** Shorter label for the bottom tab bar, where seven items share the width. */
-  short: string;
+  /** design.css icon class, without the `i-` prefix. */
+  icon?: string;
+  /** Indented under the item above it. */
+  sub?: boolean;
+  /** Carries the uncategorised count. */
+  counted?: boolean;
 };
 
-export const NAV: NavItem[] = [
-  { key: "budget", href: "/budget", label: "Budget", short: "Budget" },
+type NavGroup = { heading?: string; items: NavLink[] };
+
+// Grouped as the canvas has it: the daily screens first, then the planning
+// pair you visit once a period, then the system screens. Past periods,
+// savings goals and the IR3 pack sit as sub-items under the screen they
+// belong to, so the sidebar shows where they live rather than seven
+// unrelated destinations.
+export const NAV: NavGroup[] = [
   {
-    key: "transactions",
-    href: "/transactions",
-    label: "Transactions",
-    short: "Txns",
+    items: [
+      { key: "budget", href: "/budget", label: "Budget", icon: "home" },
+      { key: "history", href: "/budget/history", label: "How past periods went", sub: true },
+      // Personal only, so it always links without a book.
+      { key: "goals", href: "/goals", label: "Savings goals", sub: true },
+      {
+        key: "transactions",
+        href: "/transactions",
+        label: "Transactions",
+        icon: "list",
+        counted: true,
+      },
+      // Its own item rather than a link inside Transactions: an unconfirmed
+      // transfer is money the budget is counting as income or spending, and
+      // a queue you can't see is a queue that doesn't get cleared.
+      { key: "transfers", href: "/transfers", label: "Transfers", icon: "swap" },
+      { key: "reports", href: "/reports", label: "Reports", icon: "chart" },
+      { key: "ir3", href: "/reports/ir3", label: "IR3 tax pack", sub: true },
+    ],
   },
-  // Its own item rather than a link buried in Transactions: an unconfirmed
-  // transfer is money the budget is currently counting as income or spending,
-  // and a queue you can't see is a queue that doesn't get cleared.
-  { key: "transfers", href: "/transfers", label: "Transfers", short: "Pairs" },
-  // The tax surface, and the second date regime: FY and rolling twelve months
-  // rather than the pay period every screen above it runs on. Its own item
-  // because the figures it carries are the ones read out to an accountant.
-  { key: "reports", href: "/reports", label: "Reports", short: "Reports" },
-  { key: "setup", href: "/budget/setup", label: "Set budget", short: "Set up" },
-  { key: "review", href: "/budget/review", label: "Month end", short: "Close" },
-  { key: "sync", href: "/sync", label: "Sync status", short: "Sync" },
+  {
+    heading: "Planning",
+    items: [
+      { key: "setup", href: "/budget/setup", label: "Set budget", icon: "sliders" },
+      { key: "review", href: "/budget/review", label: "Month end", icon: "calcheck" },
+    ],
+  },
+  {
+    heading: "System",
+    items: [
+      { key: "sync", href: "/sync", label: "Sync status", icon: "sync" },
+      { key: "guide", href: "/guide", label: "How to use this app", icon: "help" },
+    ],
+  },
 ];
 
-/** Left sidebar. Hidden below 768px, where BottomNav takes over. */
-export function SideNav({ active, book }: { active: string; book: Book }) {
+// Screens with no item of their own light up the nearest one.
+const PARENT: Record<string, string> = {
+  goals: "budget",
+  history: "budget",
+  ir3: "reports",
+};
+
+const LOCKED_TO_PERSONAL = new Set(["goals"]);
+
+function href(item: NavLink, book: Book) {
+  return LOCKED_TO_PERSONAL.has(item.key) ? item.href : withBook(item.href, book);
+}
+
+/** Left sidebar, 768px and up. design.css hides it below that. */
+export function SideNav({
+  active,
+  book,
+  uncategorised,
+}: {
+  active: string;
+  book: Book;
+  uncategorised: number;
+}) {
   return (
-    <nav
-      style={{
-        width: 220,
-        height: "100%",
-        background: "var(--surface-card)",
-        borderRight: "1px solid var(--border-subtle)",
-        padding: "var(--space-6) var(--space-4)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "var(--space-1)",
-        fontFamily: "var(--font-sans)",
-      }}
-    >
-      <div
-        style={{
-          fontWeight: "var(--weight-bold)",
-          fontSize: "var(--text-md)",
-          color: "var(--text-primary)",
-          padding: "0 var(--space-2)",
-          marginBottom: "var(--space-6)",
-        }}
-      >
+    <aside className="side">
+      <Link className="logo" href={withBook("/budget", book)}>
+        <span className="mk" aria-hidden="true" />
         Money Book
-      </div>
-      {NAV.map((item) => {
-        const isActive = item.key === active;
-        return (
-          <Link
-            key={item.key}
-            href={withBook(item.href, book)}
-            aria-current={isActive ? "page" : undefined}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "9px 12px",
-              borderRadius: "var(--radius-md)",
-              fontSize: "var(--text-sm)",
-              fontWeight: "var(--weight-medium)",
-              textDecoration: "none",
-              color: isActive ? "var(--text-on-accent)" : "var(--text-secondary)",
-              background: isActive ? "var(--accent-gradient)" : "transparent",
-            }}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
-      {/* Pinned to the foot of the sidebar rather than in NAV: it's for
-          learning the app, not using it, and NAV also feeds the tab bar,
-          where seven items already share the width. Phones reach it from
-          the bottom of Budget. */}
-      <Link
-        href={withBook("/guide", book)}
-        aria-current={active === "guide" ? "page" : undefined}
-        style={{
-          marginTop: "auto",
-          padding: "9px 12px",
-          borderRadius: "var(--radius-md)",
-          border: "1px solid var(--border-subtle)",
-          fontSize: "var(--text-xs)",
-          fontWeight: "var(--weight-medium)",
-          textDecoration: "none",
-          color: active === "guide" ? "var(--text-primary)" : "var(--text-tertiary)",
-          background: active === "guide" ? "var(--surface-card-raised)" : "transparent",
-        }}
-      >
-        How to use this app
       </Link>
-    </nav>
+      <nav aria-label="Main">
+        {NAV.map((group, g) => (
+          <div key={g} style={{ display: "contents" }}>
+            {group.heading && <span className="lbl grp">{group.heading}</span>}
+            {group.items.map((item) => (
+              <Link
+                key={item.key}
+                className={item.sub ? "nv sub" : "nv"}
+                href={href(item, book)}
+                aria-current={item.key === active ? "page" : undefined}
+              >
+                {item.icon && <span className={`i i-${item.icon}`} aria-hidden="true" />}
+                {item.label}
+                {item.counted && uncategorised > 0 && (
+                  <span className="cnt" aria-label={`${uncategorised} need a category`}>
+                    {uncategorised}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+        ))}
+      </nav>
+    </aside>
   );
 }
 
-/** Fixed bottom tab bar, shown below 768px only. 44px targets. */
-export function BottomNav({ active, book }: { active: string; book: Book }) {
+const TABS = [
+  { key: "budget", href: "/budget", label: "Budget", icon: "home" },
+  { key: "transactions", href: "/transactions", label: "Spending", icon: "list" },
+  { key: "transfers", href: "/transfers", label: "Transfers", icon: "swap" },
+  { key: "reports", href: "/reports", label: "Reports", icon: "chart" },
+];
+
+/**
+ * Bottom tab bar, below 768px. Four destinations and a More menu.
+ *
+ * More is a native <details>, not a sheet with script behind it: it opens on
+ * tap with JavaScript off, and the links inside are ordinary links. Seven
+ * equal tabs (the old bar) made every label too short to read.
+ */
+export function BottomNav({
+  active,
+  book,
+  uncategorised,
+}: {
+  active: string;
+  book: Book;
+  uncategorised: number;
+}) {
+  const current = PARENT[active] ?? active;
+  const moreItems = NAV.flatMap((g) => g.items).filter(
+    (item) => !TABS.some((t) => t.key === item.key),
+  );
+  const moreActive = moreItems.some((item) => item.key === active);
+
   return (
-    <nav
-      className="ds-bottom-nav"
-      style={{ gridTemplateColumns: `repeat(${NAV.length},1fr)` }}
-    >
-      {NAV.map((item) => {
-        const isActive = item.key === active;
-        return (
-          <Link
-            key={item.key}
-            href={withBook(item.href, book)}
-            aria-current={isActive ? "page" : undefined}
-            style={{
-              minHeight: 44,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "0 6px",
-              borderRadius: "var(--radius-md)",
-              textDecoration: "none",
-              textAlign: "center",
-              background: isActive ? "var(--accent-gradient)" : "transparent",
-              color: isActive ? "var(--text-on-accent)" : "var(--text-muted)",
-              fontFamily: "var(--font-sans)",
-              fontSize: "var(--text-xs)",
-              fontWeight: "var(--weight-medium)",
-            }}
-          >
-            {item.short}
-          </Link>
-        );
-      })}
+    <nav className="tabs" aria-label="Main">
+      {TABS.map((tab) => (
+        <Link
+          key={tab.key}
+          href={withBook(tab.href, book)}
+          aria-current={tab.key === current && !moreActive ? "page" : undefined}
+        >
+          <span className={`i i-${tab.icon}`} aria-hidden="true" />
+          {tab.label}
+          {tab.key === "transactions" && uncategorised > 0 && (
+            <span className="cnt" aria-label={`${uncategorised} need a category`}>
+              {uncategorised}
+            </span>
+          )}
+        </Link>
+      ))}
+      <details className="more">
+        <summary aria-current={moreActive ? "page" : undefined}>
+          <span className="i i-more" aria-hidden="true" />
+          More
+        </summary>
+        <div className="more-menu sheet">
+          {moreItems.map((item) => (
+            <Link
+              key={item.key}
+              href={href(item, book)}
+              aria-current={item.key === active ? "page" : undefined}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      </details>
     </nav>
   );
 }
@@ -160,6 +199,9 @@ export function BottomNav({ active, book }: { active: string; book: Book }) {
  * decides what still means something in the other book, because only it knows
  * which of its parameters are ids scoped to one set of books. Omitted, the
  * switch lands on the screen's default view.
+ *
+ * The glyph shape carries the book (circle Personal, square Business), so the
+ * toggle reads without colour.
  */
 export function BookToggle({
   value,
@@ -172,54 +214,23 @@ export function BookToggle({
 }) {
   const href = preserve ? `${basePath}?${preserve}` : basePath;
 
-  const options: { key: Book; label: string; dot: string }[] = [
-    { key: "PERSONAL", label: "Personal", dot: "var(--book-personal)" },
-    { key: "BUSINESS", label: "Business", dot: "var(--book-business)" },
+  const options: { key: Book; label: string; glyph: string }[] = [
+    { key: "PERSONAL", label: "Personal", glyph: "p" },
+    { key: "BUSINESS", label: "Business", glyph: "b" },
   ];
 
   return (
-    <div
-      style={{
-        display: "inline-flex",
-        background: "var(--surface-inset)",
-        borderRadius: "var(--radius-full)",
-        padding: 3,
-        border: "1px solid var(--border-default)",
-        fontFamily: "var(--font-sans)",
-      }}
-    >
-      {options.map((option) => {
-        const isActive = value === option.key;
-        return (
-          <Link
-            key={option.key}
-            href={withBook(href, option.key)}
-            aria-current={isActive ? "true" : undefined}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "6px 14px",
-              borderRadius: "var(--radius-full)",
-              fontSize: "var(--text-sm)",
-              fontWeight: "var(--weight-medium)",
-              textDecoration: "none",
-              background: isActive ? "var(--surface-card-raised)" : "transparent",
-              color: isActive ? "var(--text-primary)" : "var(--text-muted)",
-            }}
-          >
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                background: option.dot,
-              }}
-            />
-            {option.label}
-          </Link>
-        );
-      })}
+    <div className="seg bookseg" role="group" aria-label="Book">
+      {options.map((option) => (
+        <Link
+          key={option.key}
+          href={withBook(href, option.key)}
+          aria-current={value === option.key ? "true" : undefined}
+        >
+          <span className={`bk ${option.glyph}`} aria-hidden="true" />
+          {option.label}
+        </Link>
+      ))}
     </div>
   );
 }

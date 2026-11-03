@@ -11,8 +11,9 @@
 // The marking is a hint: the refusal comes from `lib/goals/mutate.ts` and the
 // partial unique index, whatever the select offered.
 
+import Link from "next/link";
 import { useActionState } from "react";
-import { Button, Card, FormField } from "@/components/ui/primitives";
+import { Button, FormField, Icon } from "@/components/ui/primitives";
 import { TextField } from "@/components/ui/form";
 import { centsToDollars } from "@/lib/money";
 import type { AccountOption } from "@/lib/goals/query";
@@ -57,12 +58,13 @@ export function GoalForm({
   const seed = (field: string, fallback = ""): string => was[field] ?? fallback;
 
   return (
-    <Card title={goal ? "Edit goal" : "New goal"}>
-      <form
-        key={state?.attempt ?? 0}
-        action={formAction}
-        style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}
-      >
+    <form
+      key={state?.attempt ?? 0}
+      action={formAction}
+      className="card pad-l stack"
+      style={{ gap: 18, maxWidth: 620 }}
+    >
+        {goal && <h2 className="t-m">Edit goal</h2>}
         {goal && <input type="hidden" name="id" value={goal.id} />}
 
         <FormField label="Name" htmlFor="name" required>
@@ -76,7 +78,7 @@ export function GoalForm({
           hint="The goal's progress is this account's balance, as the bank reports it. One active goal per account, so no balance is counted twice."
         >
           <select
-            className="mb-input"
+            className="inp"
             id="accountId"
             name="accountId"
             defaultValue={seed("accountId", goal?.accountId)}
@@ -94,56 +96,66 @@ export function GoalForm({
           </select>
         </FormField>
 
-        <FormField label="Target" htmlFor="target" required>
-          <span className="mb-amount">
-            <span aria-hidden="true">$</span>
-            <input
-              id="target"
-              name="target"
-              inputMode="decimal"
-              defaultValue={seed(
-                "target",
-                goal ? centsToDollars(goal.targetCents).toFixed(2) : "",
-              )}
-              placeholder="5000"
-              style={{ width: 120 }}
-            />
-          </span>
-        </FormField>
+        <div className="grid cols-2" style={{ gap: 14 }}>
+          <FormField label="Target amount" htmlFor="target" required>
+            <span className="money-inp">
+              <span className="cur" aria-hidden="true">$</span>
+              <input
+                className="inp"
+                id="target"
+                name="target"
+                inputMode="decimal"
+                defaultValue={seed(
+                  "target",
+                  goal ? centsToDollars(goal.targetCents).toFixed(2) : "",
+                )}
+                placeholder="5000"
+              />
+            </span>
+          </FormField>
 
-        <FormField
-          label="Target date"
-          htmlFor="targetDate"
-          hint="Optional. With a date, the goal shows what has to go in each pay period to make it."
-        >
-          <input
-            className="mb-input"
-            id="targetDate"
-            type="date"
-            name="targetDate"
-            min={minDate}
-            defaultValue={seed("targetDate", goal?.targetDate)}
-          />
-        </FormField>
+          <FormField
+            label={
+              <>
+                Target date <span className="ink3" style={{ fontWeight: 400 }}>· optional</span>
+              </>
+            }
+            htmlFor="targetDate"
+            hint="With a date, the goal shows what has to go in each pay period to make it."
+          >
+            <input
+              className="inp"
+              id="targetDate"
+              type="date"
+              name="targetDate"
+              min={minDate}
+              defaultValue={seed("targetDate", goal?.targetDate)}
+            />
+          </FormField>
+        </div>
 
         <FormField label="Note" htmlFor="note" error={state?.error}>
           <textarea
-            className="mb-input"
+            className="inp"
             id="note"
             name="note"
             rows={2}
             defaultValue={seed("note", goal?.note)}
-            style={{ resize: "vertical", fontFamily: "var(--font-sans)" }}
+            style={{ minHeight: 72, padding: "12px 14px", resize: "vertical" }}
           />
         </FormField>
 
-        <div>
-          <Button type="submit" variant="primary" size="sm" disabled={pending}>
+        <div className="row wrap">
+          <Button type="submit" variant="primary" disabled={pending}>
             {pending ? "Saving…" : goal ? "Save changes" : "Create goal"}
           </Button>
+          {!goal && (
+            <Link className="btn quiet" href="/goals">
+              Cancel
+            </Link>
+          )}
         </div>
-      </form>
-    </Card>
+    </form>
   );
 }
 
@@ -155,17 +167,16 @@ export function ArchiveButton({ id, archived }: { id: string; archived: boolean 
   );
 
   return (
-    <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <form action={formAction} className="stack" style={{ gap: 8, alignItems: "flex-start" }}>
       <input type="hidden" name="id" value={id} />
-      <div>
-        <Button type="submit" variant={archived ? "secondary" : "ghost"} size="sm" disabled={pending}>
-          {pending ? "Saving…" : archived ? "Unarchive" : "Archive goal"}
-        </Button>
-      </div>
+      <Button type="submit" variant={archived ? "secondary" : "quiet"} disabled={pending}>
+        <Icon name="archive" size="sm" />
+        {pending ? "Saving…" : archived ? "Restore" : "Archive"}
+      </Button>
       {state?.error && (
-        <p role="alert" style={{ margin: 0, fontSize: "var(--text-xs)", color: "var(--status-error)" }}>
+        <span className="err-t" role="alert">
           {state.error}
-        </p>
+        </span>
       )}
     </form>
   );
@@ -197,21 +208,22 @@ export function DeleteGoalForm({
   );
 
   return (
-    <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+    <form action={formAction} className="stack" style={{ gap: 12 }}>
       <input type="hidden" name="id" value={id} />
-      <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: "var(--text-sm)" }}>
+      <label className="chk">
         <input type="checkbox" name="confirm" value={confirmValue} required />
-        Delete &ldquo;{name}&rdquo; permanently
+        I understand deleting &ldquo;{name}&rdquo; can&apos;t be undone
       </label>
-      <div>
-        <Button type="submit" variant="danger" size="sm" disabled={pending}>
+      <div className="row wrap">
+        <Button type="submit" variant="danger" disabled={pending}>
           {pending ? "Deleting…" : "Delete goal"}
         </Button>
+        <span className="t-xs ink3">Refused unless the box is ticked.</span>
       </div>
       {state?.error && (
-        <p role="alert" style={{ margin: 0, fontSize: "var(--text-xs)", color: "var(--status-error)" }}>
+        <span className="err-t" role="alert">
           {state.error}
-        </p>
+        </span>
       )}
     </form>
   );

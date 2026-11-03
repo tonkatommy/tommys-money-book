@@ -1,19 +1,18 @@
 // The goal card and history table, shared by /goals and /goals/[id].
 //
-// Server components. The progress bar is a div width, not a chart, so it
+// Server components. The progress meter is a div width, not a chart, so it
 // renders complete with JavaScript disabled (4c spec §1: no chart library on
 // these routes). Every figure comes from `GoalView`; nothing here does money
 // arithmetic, only formatting.
+//
+// Markup follows the canvas's Goals and GoalDetail artboards.
 
 import Link from "next/link";
-import { Alert, Badge, Card } from "@/components/ui/primitives";
-import { Figure, KV } from "@/components/ui/data";
+import { Alert } from "@/components/ui/primitives";
 import { formatNZD } from "@/lib/money";
-import { nzDate, nzToday } from "@/lib/budget/period";
+import { dateRange, nzDate, nzToday } from "@/lib/budget/period";
 import type { GoalView, HistoryRow } from "@/lib/goals/query";
 import type { Projection } from "@/lib/goals/pace";
-
-const muted = { fontSize: "var(--text-xs)", color: "var(--text-muted)" } as const;
 
 /**
  * Whole percent, rounded DOWN. 99.6% reads as 99%: rounding to nearest would
@@ -35,237 +34,228 @@ function projectionText(projection: Projection): string | null {
     case "no-history":
       return "No complete pay period of history yet, so no projection.";
     case "not-growing":
-      return "Not growing at the current rate, so there is no date to project.";
+      return "Not growing at the current rate, so there's no date to project.";
     case "too-far":
       return "At the current rate this is more than 50 years away.";
     case "on-date":
-      return `At the current rate, reached by ${nzDate(projection.by)} (${plural(projection.periods, "pay period")}).`;
+      return `${nzDate(projection.by)} at the current rate (${plural(projection.periods, "pay period")}).`;
   }
 }
 
-function ProgressBar({ barPercent }: { barPercent: number }) {
-  return (
-    <div
-      aria-hidden="true"
-      style={{
-        height: 8,
-        borderRadius: "var(--radius-full)",
-        background: "var(--surface-inset)",
-        border: "1px solid var(--border-subtle)",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          width: `${barPercent}%`,
-          height: "100%",
-          background: "var(--money-in)",
-        }}
-      />
-    </div>
-  );
+function Status({ goal }: { goal: GoalView }) {
+  const pace = goal.pace;
+  if (pace?.progress.reached) return <span className="delta ahead">Reached</span>;
+  if (pace?.onTrack === true) return <span className="delta ahead">On track</span>;
+  if (pace?.onTrack === false) return <span className="delta behind">Behind</span>;
+  return null;
 }
 
+/**
+ * One goal. `link` makes the whole card the way into its detail page, as on
+ * the list; the detail page shows it unlinked with the history beside it.
+ */
 export function GoalCard({ goal, link = false }: { goal: GoalView; link?: boolean }) {
   const { pace } = goal;
   const hidden = goal.warnings.some((warning) => warning.hidesFigures);
 
-  const title = link ? <Link href={`/goals/${goal.id}`}>{goal.name}</Link> : goal.name;
-
-  return (
-    <Card
-      title={title}
-      action={
-        pace?.progress.reached ? (
-          <Badge tone="ok">Reached</Badge>
-        ) : pace?.onTrack === true ? (
-          <Badge tone="ok">On track</Badge>
-        ) : pace?.onTrack === false ? (
-          <Badge tone="warning">Behind</Badge>
-        ) : undefined
-      }
-    >
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-        <div style={muted}>
-          Saved in {goal.account.name}
-          {goal.balanceAsAt && !hidden && (
-            <> · balance as at {nzDate(nzToday(goal.balanceAsAt))}</>
-          )}
-        </div>
-
-        {goal.warnings.map((warning) => (
-          <Alert key={warning.message} level={warning.level}>
-            {warning.message}
-          </Alert>
-        ))}
-
-        {hidden || !pace || goal.balanceCents === null ? (
-          <KV label="Target" value={formatNZD(goal.targetCents)} />
-        ) : (
-          <>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
-                gap: "var(--space-4)",
-              }}
-            >
-              <Figure
-                label="Balance"
-                value={formatNZD(goal.balanceCents)}
-                tone={goal.balanceCents < 0 ? "var(--status-error)" : undefined}
-              />
-              <Figure label="Target" value={formatNZD(goal.targetCents)} />
-              {pace.progress.reached ? (
-                <Figure
-                  label="Over target by"
-                  value={formatNZD(pace.progress.overshootCents)}
-                  tone="var(--money-in)"
-                />
-              ) : (
-                <Figure label="Still to go" value={formatNZD(pace.progress.remainingCents)} />
-              )}
-            </div>
-
-            {pace.progress.barPercent !== null && pace.progress.percent !== null && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <ProgressBar barPercent={pace.progress.barPercent} />
-                <span style={muted}>{percentText(pace.progress.percent)} of target</span>
-              </div>
-            )}
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-              {goal.targetDate && pace.periodsLeft !== null && (
-                pace.periodsLeft === 0 ? (
-                  <KV
-                    label={`Target date ${nzDate(goal.targetDate)}`}
-                    value={
-                      pace.progress.reached
-                        ? "reached"
-                        : pace.datePassed
-                          ? "passed"
-                          : "no payday left before it"
-                    }
-                    tone={pace.progress.reached ? undefined : "var(--status-warning)"}
-                    mono={false}
-                  />
-                ) : (
-                  <>
-                    <KV
-                      label={`Target date ${nzDate(goal.targetDate)}`}
-                      value={plural(pace.periodsLeft, "pay period") + " left"}
-                      mono={false}
-                    />
-                    {!pace.progress.reached && pace.requiredPerPeriodCents !== null && (
-                      <KV
-                        label="Needed each pay period"
-                        value={formatNZD(pace.requiredPerPeriodCents)}
-                      />
-                    )}
-                  </>
-                )
-              )}
-
-              {!pace.progress.reached && (
-                <KV
-                  label={
-                    pace.averageContributionCents === null
-                      ? "Average put in"
-                      : `Average put in, last ${plural(pace.averagedOver, "pay period")}`
-                  }
-                  value={
-                    pace.averageContributionCents === null
-                      ? "no history yet"
-                      : formatNZD(pace.averageContributionCents)
-                  }
-                  tone={
-                    pace.averageContributionCents !== null && pace.averageContributionCents < 0
-                      ? "var(--money-out)"
-                      : undefined
-                  }
-                />
-              )}
-            </div>
-
-            {projectionText(pace.projection) && (
-              <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                {projectionText(pace.projection)}
-              </p>
-            )}
-          </>
-        )}
-
-        {goal.note && (
-          <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-            {goal.note}
-          </p>
-        )}
+  const body = (
+    <>
+      <div className="row between wrap">
+        <span className="stack" style={{ gap: 2 }}>
+          <span className="t-l">{goal.name}</span>
+          <span className="range">
+            {goal.account.name}
+            {goal.balanceAsAt && !hidden && <> · balance as at {nzDate(nzToday(goal.balanceAsAt))}</>}
+          </span>
+        </span>
+        <Status goal={goal} />
       </div>
-    </Card>
+
+      {goal.warnings.map((warning) => (
+        <Alert key={warning.message} level={warning.level}>
+          {warning.message}
+        </Alert>
+      ))}
+
+      {hidden || !pace || goal.balanceCents === null ? (
+        <div className="row wrap" style={{ alignItems: "baseline", gap: 10 }}>
+          <span className="na">balance not trusted</span>
+          <span className="t-s ink2">target {formatNZD(goal.targetCents)}</span>
+        </div>
+      ) : (
+        <>
+          <div className="row wrap" style={{ alignItems: "baseline", gap: 10 }}>
+            <span
+              className="m"
+              style={{ fontSize: 32, color: goal.balanceCents < 0 ? "var(--bad)" : undefined }}
+            >
+              {formatNZD(goal.balanceCents)}
+            </span>
+            <span className="t-s ink2">of {formatNZD(goal.targetCents)}</span>
+            {pace.progress.percent !== null && (
+              <span className="badge">{percentText(pace.progress.percent)}</span>
+            )}
+          </div>
+          {pace.progress.barPercent !== null && (
+            <div className="meter" aria-hidden="true">
+              <div
+                className="fill"
+                style={{ width: `${pace.progress.barPercent}%`, background: "var(--accent)" }}
+              />
+            </div>
+          )}
+
+          <div className="grid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px 16px" }}>
+            <div className="stack">
+              <span className="t-xs ink3">{pace.progress.reached ? "Over target by" : "To go"}</span>
+              <span className={pace.progress.reached ? "m in" : "m"}>
+                {formatNZD(
+                  pace.progress.reached ? pace.progress.overshootCents : pace.progress.remainingCents,
+                )}
+              </span>
+            </div>
+            <div className="stack">
+              <span className="t-xs ink3">Target date</span>
+              <span className="t-s">
+                {goal.targetDate ? nzDate(goal.targetDate) : <span className="na">none set</span>}
+                {goal.targetDate && pace.periodsLeft !== null && pace.periodsLeft > 0 && (
+                  <span className="ink3"> · {plural(pace.periodsLeft, "pay period")} left</span>
+                )}
+                {goal.targetDate && pace.periodsLeft === 0 && !pace.progress.reached && (
+                  <span style={{ color: "var(--warn)" }}>
+                    {" "}
+                    · {pace.datePassed ? "passed" : "no payday left before it"}
+                  </span>
+                )}
+              </span>
+            </div>
+            {!pace.progress.reached && (
+              <>
+                <div className="stack">
+                  <span className="t-xs ink3">Needed per pay period</span>
+                  <span className="m">
+                    {pace.requiredPerPeriodCents !== null ? (
+                      formatNZD(pace.requiredPerPeriodCents)
+                    ) : (
+                      <span className="na">{goal.targetDate ? "—" : "no date"}</span>
+                    )}
+                  </span>
+                </div>
+                <div className="stack">
+                  <span className="t-xs ink3">
+                    Recent average saved
+                    {pace.averageContributionCents !== null &&
+                      ` · ${plural(pace.averagedOver, "period")}`}
+                  </span>
+                  <span
+                    className="m"
+                    style={{
+                      color:
+                        pace.averageContributionCents !== null && pace.averageContributionCents < 0
+                          ? "var(--bad)"
+                          : undefined,
+                    }}
+                  >
+                    {pace.averageContributionCents === null ? (
+                      <span className="na">no history yet</span>
+                    ) : (
+                      formatNZD(pace.averageContributionCents)
+                    )}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {projectionText(pace.projection) && (
+            <>
+              <div className="hr" />
+              <p className="t-s">
+                <span className="semi">Projected finish:</span>{" "}
+                <span className="ink2">{projectionText(pace.projection)}</span>
+              </p>
+            </>
+          )}
+        </>
+      )}
+
+      {goal.note && <p className="t-s ink2">{goal.note}</p>}
+    </>
+  );
+
+  return link ? (
+    <Link className="card pad-l stack" href={`/goals/${goal.id}`} style={{ gap: 14 }}>
+      {body}
+    </Link>
+  ) : (
+    <section className="card pad-l stack" style={{ gap: 14 }} aria-label={goal.name}>
+      {body}
+    </section>
   );
 }
-
-const cell = { padding: "10px 14px 10px 0" } as const;
-const numeric = { ...cell, textAlign: "right" } as const;
 
 /**
  * The periods behind the average, oldest first. The average on the card is
  * exactly the mean of the counted rows here, so it can be checked by eye.
  */
-export function HistoryTable({ rows }: { rows: HistoryRow[] }) {
+export function HistoryTable({
+  rows,
+  averageCents,
+}: {
+  rows: HistoryRow[];
+  averageCents: number | null;
+}) {
   const anyUncounted = rows.some((row) => !row.counted);
   const anyClosing = rows.some((row) => row.closingBalanceCents !== null);
 
   return (
-    <Card title="Pay period by pay period">
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-sm)" }}>
+    <section className="card" style={{ padding: 0, overflow: "hidden" }} aria-label="Pay periods behind the average">
+      <div className="grp-h">
+        <span className="sect-t">Behind the average</span>
+        <span className="range">complete pay periods</span>
+      </div>
+      <div className="scroll">
+        <table className="tbl tight">
           <thead>
-            <tr style={{ ...muted, textAlign: "left" }}>
-              <th style={cell}>Period</th>
-              <th style={numeric}>Net in</th>
-              {anyClosing && <th style={numeric}>Closing balance</th>}
+            <tr>
+              <th>Pay period</th>
+              <th className="num">Saved</th>
+              {anyClosing && <th className="num">Closing balance</th>}
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr
-                key={row.period.start.toISOString()}
-                style={{
-                  borderTop: "1px solid var(--border-subtle)",
-                  color: row.counted ? undefined : "var(--text-muted)",
-                }}
-              >
-                <td style={cell}>
-                  {nzDate(row.period.start)} – {nzDate(row.period.end)}
+              <tr key={row.period.start.toISOString()} className={row.counted ? undefined : "ink3"}>
+                <td className="range" style={{ fontSize: 13 }}>
+                  {dateRange(row.period.start, row.period.end)}
                   {!row.counted && " *"}
                 </td>
-                <td
-                  className="mb-num"
-                  style={{
-                    ...numeric,
-                    color: row.counted && row.netFlowCents < 0 ? "var(--money-out)" : undefined,
-                  }}
-                >
+                <td className="num" style={{ color: row.counted && row.netFlowCents < 0 ? "var(--bad)" : undefined }}>
                   {formatNZD(row.netFlowCents)}
                 </td>
                 {anyClosing && (
-                  <td className="mb-num" style={numeric}>
+                  <td className="num">
                     {row.closingBalanceCents === null ? "—" : formatNZD(row.closingBalanceCents)}
                   </td>
                 )}
               </tr>
             ))}
+            {averageCents !== null && (
+              <tr className="tot">
+                <td>Average</td>
+                <td className="num">{formatNZD(averageCents)}</td>
+                {anyClosing && <td />}
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
-      {anyUncounted && (
-        <p style={{ ...muted, margin: "var(--space-3) 0 0" }}>
-          * Before or across the start of the bank feed&apos;s history, so only
-          part of the period is in the data. Shown, but left out of the
-          average.
-        </p>
-      )}
-    </Card>
+      <p className="t-xs ink3" style={{ padding: "12px 16px" }}>
+        Saved is the change in the account&apos;s balance over the period, interest
+        included. The current period isn&apos;t counted until it ends.
+        {anyUncounted &&
+          " * Before or across the start of the bank feed's history, so only part of the period is in the data: shown, but left out of the average."}
+      </p>
+    </section>
   );
 }

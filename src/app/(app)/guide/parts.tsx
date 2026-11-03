@@ -16,7 +16,7 @@ export function stepHref(step: GuideStep, book: Book): string {
   return withBook(`/guide?step=${step.slug}`, book);
 }
 
-/** Numbered step list, grouped. Earlier steps show a tick, not a number. */
+/** Numbered step list, grouped. Earlier steps are marked done. */
 export function StepList({
   current,
   book,
@@ -25,11 +25,13 @@ export function StepList({
   book: Book;
 }) {
   return (
-    <ol className="mb-guide-list">
+    <ol className="stack" style={{ margin: 0, padding: 0, listStyle: "none", gap: 2 }}>
       {groupedSteps().map(({ group, steps }) => (
-        <li key={group}>
-          <div className="mb-guide-group">{group}</div>
-          <ol>
+        <li key={group} className="stack" style={{ gap: 2 }}>
+          <span className="lbl" style={{ margin: "10px 10px 4px" }}>
+            {group}
+          </span>
+          <ol className="stack" style={{ margin: 0, padding: 0, listStyle: "none", gap: 2 }}>
             {steps.map(({ step, index }) => {
               const state =
                 index === current ? "current" : index < current ? "done" : "todo";
@@ -37,14 +39,27 @@ export function StepList({
                 <li key={step.slug}>
                   <Link
                     href={stepHref(step, book)}
-                    className="mb-guide-item"
-                    data-state={state}
+                    className="row"
                     aria-current={state === "current" ? "step" : undefined}
+                    style={{
+                      minHeight: 40,
+                      padding: "0 10px",
+                      borderRadius: 8,
+                      textDecoration: "none",
+                      color: "var(--ink)",
+                      background: state === "current" ? "var(--accent-soft)" : undefined,
+                    }}
                   >
-                    <span className="mb-guide-num" aria-hidden="true">
-                      {state === "done" ? "✓" : index + 1}
+                    <span className="num t-xs ink3" style={{ width: 22 }}>
+                      {index + 1}
                     </span>
-                    <span>{step.title}</span>
+                    <span className={state === "current" ? "t-s semi" : "t-s"}>{step.title}</span>
+                    <span className="grow" />
+                    {state === "done" && (
+                      <span className="ink3" aria-label="done">
+                        <span className="i i-check sm" aria-hidden="true" />
+                      </span>
+                    )}
                   </Link>
                 </li>
               );
@@ -91,32 +106,23 @@ export function StepArrow({
   );
 }
 
-/** Thin progress bar. Step 1 of N shows a sliver, not an empty track. */
+/** One dash per step: done, current, still to come. */
 export function Progress({ current }: { current: number }) {
-  const pct = ((current + 1) / GUIDE_STEPS.length) * 100;
   return (
     <div
+      className="step-dots"
       role="progressbar"
       aria-valuemin={1}
       aria-valuemax={GUIDE_STEPS.length}
       aria-valuenow={current + 1}
       aria-label="Guide progress"
-      style={{
-        height: 4,
-        borderRadius: "var(--radius-full)",
-        background: "var(--surface-inset)",
-        overflow: "hidden",
-      }}
     >
-      <div
-        style={{
-          width: `${pct}%`,
-          height: "100%",
-          background: "var(--accent-gradient)",
-          borderRadius: "var(--radius-full)",
-          transition: "width var(--duration-base) var(--ease-standard)",
-        }}
-      />
+      {GUIDE_STEPS.map((step, index) => (
+        <span
+          key={step.slug}
+          className={index === current ? "on" : index < current ? "done" : undefined}
+        />
+      ))}
     </div>
   );
 }
@@ -137,10 +143,10 @@ export function Example({
   children: ReactNode;
 }) {
   return (
-    <figure className="mb-guide-example">
-      <div className="mb-guide-example-tag">Example · made-up figures</div>
+    <figure className="mini stack" style={{ gap: 10, margin: 0, pointerEvents: "auto", borderStyle: "dashed" }}>
+      <span className="lbl">Example · made-up figures</span>
       <div>{children}</div>
-      {caption && <figcaption>{caption}</figcaption>}
+      {caption && <figcaption className="t-xs ink3">{caption}</figcaption>}
     </figure>
   );
 }
@@ -148,14 +154,7 @@ export function Example({
 /** Small sub-heading inside a step body. */
 export function StepHeading({ children }: { children: ReactNode }) {
   return (
-    <h3
-      style={{
-        margin: "var(--space-2) 0 0",
-        fontSize: "var(--text-sm)",
-        fontWeight: "var(--weight-semibold)",
-        color: "var(--text-primary)",
-      }}
-    >
+    <h3 className="t-m" style={{ marginTop: 8 }}>
       {children}
     </h3>
   );

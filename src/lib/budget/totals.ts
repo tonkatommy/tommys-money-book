@@ -138,6 +138,23 @@ export function budgetTotals(
 }
 
 /**
+ * One everyday category's pace: where even spending would have it by today,
+ * minus what it has actually spent. Positive is ahead (spent less).
+ *
+ * The same arithmetic as `paceDeltaCents` above, per line, so the category
+ * rows and the headline verdict can never disagree about direction. A zero
+ * budget has no pace at all, so it returns null rather than a confident
+ * "behind by" the whole spend.
+ */
+export function linePaceDeltaCents(
+  line: Pick<BudgetLine, "budgetCents" | "spentCents">,
+  period: Pick<PayPeriod, "elapsed">,
+): number | null {
+  if (line.budgetCents <= 0) return null;
+  return Math.round(line.budgetCents * period.elapsed) - line.spentCents;
+}
+
+/**
  * What a category is allowed to spend: the standing budget plus any carryover.
  *
  * Floored at zero. A carried-over overspend larger than the budget would

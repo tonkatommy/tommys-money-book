@@ -7,9 +7,12 @@
 // `budget/setup/forms.tsx`. Every input is native, so the form still submits
 // and saves correctly with JavaScript disabled; the island only improves the
 // feedback.
+//
+// Drawn inside the rental section of the pack (IR3.dc.html), as a sunk panel
+// whose border turns serious while either figure is still blank.
 
 import { useActionState } from "react";
-import { Button, Card, FormField } from "@/components/ui/primitives";
+import { Button, FormField } from "@/components/ui/primitives";
 import { centsToDollars } from "@/lib/money";
 import { saveTaxYearAdjustmentAction, type FormState } from "./actions";
 
@@ -25,23 +28,25 @@ import { saveTaxYearAdjustmentAction, type FormState } from "./actions";
 function OptionalAmountField({
   name,
   defaultText,
-  ariaLabel,
+  missing,
 }: {
   name: string;
   defaultText: string;
-  ariaLabel: string;
+  missing: boolean;
 }) {
   return (
-    <span className="mb-amount">
-      <span aria-hidden="true">$</span>
+    <span className="money-inp">
+      <span className="cur" aria-hidden="true">
+        $
+      </span>
       <input
+        className="inp"
         id={name}
         name={name}
         inputMode="decimal"
         placeholder="not entered"
         defaultValue={defaultText}
-        aria-label={ariaLabel}
-        style={{ width: 110 }}
+        style={missing ? { borderColor: "var(--bad)", borderWidth: 2 } : undefined}
       />
     </span>
   );
@@ -73,63 +78,63 @@ export function AdjustmentsForm({
   const seed = (field: string, persistedCents: number | null): string =>
     state?.values?.[field] ?? asText(persistedCents);
 
+  const missing =
+    rentalManagementFeeCents === null || rentalMortgageInterestCents === null;
+
   return (
-    <form key={state?.attempt ?? 0} action={formAction}>
+    <form
+      key={state?.attempt ?? 0}
+      id="bank-cant-see"
+      action={formAction}
+      className="stack"
+      style={{
+        gap: 14,
+        marginTop: 18,
+        padding: 18,
+        borderRadius: 12,
+        background: "var(--sunk)",
+        border: `1px solid ${missing ? "var(--bad-line)" : "var(--line)"}`,
+      }}
+    >
       <input type="hidden" name="fyLabel" value={fyLabel} />
-
-      <Card
-        title={`Adjustments for ${fyLabel}`}
-        action={
-          <Button type="submit" variant="primary" size="sm" disabled={pending}>
-            {pending ? "Saving…" : "Save"}
-          </Button>
-        }
-      >
-        <p
-          style={{
-            margin: "0 0 var(--space-4)",
-            fontSize: "var(--text-xs)",
-            color: "var(--text-tertiary)",
-            lineHeight: 1.6,
-          }}
-        >
-          Two figures the bank feed cannot see. Enter them once a year from
-          the Ray White and ASB statements — leaving either blank is what
-          keeps the warnings below honest, rather than the report silently
+      <div className="stack" style={{ gap: 2 }}>
+        <h3 className="t-m">Figures the bank can&apos;t see · {fyLabel}</h3>
+        <span className="t-s ink2">
+          Enter them once a year from the Ray White and ASB statements. Leaving
+          one blank keeps the warnings honest, rather than the pack quietly
           assuming a number.
-        </p>
-
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "var(--space-4)",
-          }}
+        </span>
+      </div>
+      <div className="grid cols-2" style={{ gap: 14 }}>
+        <FormField
+          label="Ray White management fee"
+          htmlFor="rentalManagementFee"
+          hint="Annual total from the manager's statement."
+          error={state?.error}
         >
-          <FormField
-            label="Ray White management fee (annual total)"
-            htmlFor="rentalManagementFee"
-            error={state?.error}
-          >
-            <OptionalAmountField
-              name="rentalManagementFee"
-              defaultText={seed("rentalManagementFee", rentalManagementFeeCents)}
-              ariaLabel="Ray White management fee, annual total"
-            />
-          </FormField>
-
-          <FormField
-            label="ASB mortgage interest (annual total, per loan statement)"
-            htmlFor="rentalMortgageInterest"
-          >
-            <OptionalAmountField
-              name="rentalMortgageInterest"
-              defaultText={seed("rentalMortgageInterest", rentalMortgageInterestCents)}
-              ariaLabel="ASB mortgage interest, annual total"
-            />
-          </FormField>
-        </div>
-      </Card>
+          <OptionalAmountField
+            name="rentalManagementFee"
+            defaultText={seed("rentalManagementFee", rentalManagementFeeCents)}
+            missing={rentalManagementFeeCents === null}
+          />
+        </FormField>
+        <FormField
+          label="ASB mortgage interest"
+          htmlFor="rentalMortgageInterest"
+          hint="Annual total, from the loan statement."
+        >
+          <OptionalAmountField
+            name="rentalMortgageInterest"
+            defaultText={seed("rentalMortgageInterest", rentalMortgageInterestCents)}
+            missing={rentalMortgageInterestCents === null}
+          />
+        </FormField>
+      </div>
+      <div className="row wrap">
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
+          {pending ? "Saving…" : "Save figures"}
+        </Button>
+      </div>
     </form>
   );
 }

@@ -1,28 +1,26 @@
-// The design system's core primitives, ported from the Claude Design project
-// be28709a-d521-4a24-8404-a9233306867c.
+// Core primitives, rendered as the Money Book canvas's components.
 //
-// They style themselves with inline styles over CSS custom properties, exactly
-// as the design system does. That is deliberate rather than lazy: it keeps
-// each component a one-to-one match with its source in the design project, so
-// a visual change made there can be diffed against the code here instead of
-// being re-derived from a screenshot. The tokens themselves live in
-// globals.css.
+// Each one emits design.css classes (`.badge`, `.btn`, `.card`, `.banner`)
+// rather than styling itself inline, so it stays a one-to-one match with the
+// canvas's Components artboard: a visual change made there lands as a CSS
+// diff, not a re-derived style object.
 //
 // All server components. Nothing here has state or an event handler, which is
-// what lets the budget screens render without shipping any JavaScript.
+// what lets every screen render without shipping any JavaScript.
 
 import type { CSSProperties, ReactNode } from "react";
 import type { Book } from "@/generated/prisma/client";
 
 export type Tone = "ok" | "warning" | "error" | "neutral";
 
-const toneVars = (tone: Tone) => ({
-  color: `var(--status-${tone})`,
-  background: `var(--status-${tone}-bg)`,
-  border: `1px solid var(--status-${tone}-border)`,
-});
+const badgeClass: Record<Tone, string> = {
+  ok: "badge b-ok",
+  warning: "badge b-warn",
+  error: "badge b-bad",
+  neutral: "badge",
+};
 
-/** Small pill for status — "balanced", "needs mapping", "drift $12.40". */
+/** Small status label — "balanced", "needs mapping", "drift $12.40". */
 export function Badge({
   tone = "neutral",
   children,
@@ -30,50 +28,18 @@ export function Badge({
   tone?: Tone;
   children: ReactNode;
 }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        borderRadius: "var(--radius-full)",
-        padding: "3px 10px",
-        fontSize: "var(--text-xs)",
-        fontWeight: "var(--weight-medium)",
-        fontFamily: "var(--font-sans)",
-        whiteSpace: "nowrap",
-        ...toneVars(tone),
-      }}
-    >
-      {children}
-    </span>
-  );
+  return <span className={badgeClass[tone]}>{children}</span>;
 }
 
-const buttonSizes = {
-  sm: { padding: "6px 12px", fontSize: "var(--text-xs)" },
-  md: { padding: "9px 16px", fontSize: "var(--text-sm)" },
-  lg: { padding: "12px 22px", fontSize: "var(--text-base)" },
+const buttonVariants = {
+  primary: "btn primary",
+  secondary: "btn",
+  quiet: "btn quiet",
+  ghost: "btn ghost",
+  danger: "btn danger",
 } as const;
 
-const buttonVariants = {
-  primary: {
-    background: "var(--accent-gradient)",
-    color: "var(--text-on-accent)",
-    boxShadow: "var(--shadow-glow-accent)",
-  },
-  secondary: {
-    background: "var(--surface-card-raised)",
-    color: "var(--text-primary)",
-    border: "1px solid var(--border-default)",
-  },
-  ghost: { background: "transparent", color: "var(--text-secondary)" },
-  danger: {
-    background: "var(--status-error-bg)",
-    color: "var(--status-error)",
-    border: "1px solid var(--status-error-border)",
-  },
-} as const;
+const buttonSizes = { sm: " sm", md: "", lg: "" } as const;
 
 type ButtonProps = {
   variant?: keyof typeof buttonVariants;
@@ -83,16 +49,14 @@ type ButtonProps = {
   name?: string;
   value?: string;
   disabled?: boolean;
+  block?: boolean;
   style?: CSSProperties;
 };
 
 /**
- * The amber gradient is the brand's one loud element — used sparingly.
- *
- * Hover and press states are CSS-only (see the `.mb-btn` rules in
- * globals.css) rather than the design system's inline mouse handlers, because
- * handlers would make every button a client component and this is mostly used
- * inside forms on server-rendered pages.
+ * One filled button per screen, for the action the screen exists for.
+ * Hover is CSS-only, so a button inside a server-rendered form needs no
+ * client component.
  */
 export function Button({
   variant = "primary",
@@ -102,31 +66,17 @@ export function Button({
   name,
   value,
   disabled = false,
+  block = false,
   style,
 }: ButtonProps) {
   return (
     <button
-      className="mb-btn"
+      className={`${buttonVariants[variant]}${buttonSizes[size]}${block ? " block" : ""}`}
       type={type}
       name={name}
       value={value}
       disabled={disabled}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        minHeight: 32,
-        borderRadius: "var(--radius-md)",
-        fontFamily: "var(--font-sans)",
-        fontWeight: "var(--weight-semibold)",
-        border: "1px solid transparent",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.5 : 1,
-        ...buttonSizes[size],
-        ...buttonVariants[variant],
-        ...style,
-      }}
+      style={style}
     >
       {children}
     </button>
@@ -146,76 +96,44 @@ export function ButtonLink({
   children: ReactNode;
 }) {
   return (
-    <a
-      className="mb-btn"
-      href={href}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        minHeight: 32,
-        borderRadius: "var(--radius-md)",
-        fontFamily: "var(--font-sans)",
-        fontWeight: "var(--weight-semibold)",
-        border: "1px solid transparent",
-        textDecoration: "none",
-        ...buttonSizes[size],
-        ...buttonVariants[variant],
-      }}
-    >
+    <a className={`${buttonVariants[variant]}${buttonSizes[size]}`} href={href}>
       {children}
     </a>
   );
 }
 
-/** Elevated dark card — the base container for every panel in the app. */
+/** design.css icon, decorative. `name` is the part after `i-`. */
+export function Icon({ name, size }: { name: string; size?: "sm" | "lg" }) {
+  return <span className={`i i-${name}${size ? ` ${size}` : ""}`} aria-hidden="true" />;
+}
+
+/** The base container for every panel in the app. */
 export function Card({
   title,
   action,
   children,
   padded = true,
+  label,
 }: {
   title?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   padded?: boolean;
+  /** Accessible name when the card has no visible title. */
+  label?: string;
 }) {
   return (
     <section
-      style={{
-        background: "var(--surface-card)",
-        border: "1px solid var(--border-subtle)",
-        borderRadius: "var(--radius-xl)",
-        boxShadow: "var(--shadow-card)",
-        padding: padded ? "var(--space-6)" : 0,
-        fontFamily: "var(--font-sans)",
-      }}
+      className={padded ? "card pad-l" : "card"}
+      style={padded ? undefined : { padding: 0, overflow: "hidden" }}
+      aria-label={label}
     >
       {(title || action) && (
         <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "var(--space-3)",
-            flexWrap: "wrap",
-            padding: padded ? 0 : "var(--space-6) var(--space-6) 0",
-            marginBottom: "var(--space-4)",
-          }}
+          className="card-h"
+          style={padded ? undefined : { padding: "16px 20px 0" }}
         >
-          {title && (
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "var(--text-sm)",
-                fontWeight: "var(--weight-semibold)",
-                color: "var(--text-secondary)",
-              }}
-            >
-              {title}
-            </h2>
-          )}
+          {title && <h2>{title}</h2>}
           {action}
         </div>
       )}
@@ -224,169 +142,97 @@ export function Card({
   );
 }
 
-/** Dot + label, for at-a-glance system health. */
+/** Dot + label, for at-a-glance health. Shape differs per tone, not just hue. */
 export function StatusDot({ tone = "neutral", label }: { tone?: Tone; label?: ReactNode }) {
-  const colour = `var(--status-${tone})`;
+  const dot =
+    tone === "error" ? "dot bad" : tone === "warning" ? "dot warn" : "dot";
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        fontFamily: "var(--font-sans)",
-      }}
-    >
+    <span className="row" style={{ gap: 8 }}>
       <span
-        style={{
-          width: 10,
-          height: 10,
-          flexShrink: 0,
-          borderRadius: "var(--radius-full)",
-          background: colour,
-          boxShadow: `0 0 8px ${colour}`,
-        }}
+        className={dot}
+        aria-hidden="true"
+        style={tone === "neutral" ? { background: "var(--ink-3)" } : undefined}
       />
-      {label && (
-        <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-          {label}
-        </span>
-      )}
+      {label && <span className="t-s ink2">{label}</span>}
     </span>
   );
 }
 
-/** Inline banner for sync errors and review-queue warnings. */
+/**
+ * Warning banner. Sits ABOVE the figures it affects, most serious first.
+ *
+ * `title` is what is wrong, `children` the detail, and `affects` names the
+ * figures it bends ("Understates: spending, pace, safe to spend"), because
+ * a warning that doesn't say which number to distrust gets read as noise.
+ */
 export function Alert({
   level = "warning",
+  title,
+  affects,
+  actions,
+  icon,
   children,
 }: {
-  level?: "warning" | "error";
-  children: ReactNode;
+  level?: "warning" | "error" | "info";
+  title?: ReactNode;
+  affects?: ReactNode;
+  actions?: ReactNode;
+  icon?: string;
+  children?: ReactNode;
 }) {
-  const tone = level === "error" ? "error" : "warning";
+  const cls = level === "error" ? "banner bad" : level === "info" ? "banner info" : "banner";
+  const glyph = icon ?? (level === "error" ? "alert" : level === "info" ? "info" : "warn");
   return (
-    <div
-      style={{
-        borderRadius: "var(--radius-lg)",
-        padding: "var(--space-4)",
-        fontSize: "var(--text-sm)",
-        fontFamily: "var(--font-sans)",
-        ...toneVars(tone),
-      }}
-    >
-      {children}
+    <div className={cls} role={level === "error" ? "alert" : undefined}>
+      <Icon name={glyph} />
+      <div>
+        {title && <p className="bt">{title}</p>}
+        {children &&
+          (title ? (
+            <div className="bb">{children}</div>
+          ) : (
+            <div style={{ fontSize: 15, lineHeight: 1.5 }}>{children}</div>
+          ))}
+        {affects && <p className="aff">{affects}</p>}
+        {actions && <div className="acts">{actions}</div>}
+      </div>
     </div>
   );
 }
 
-/** Category tag. The book shows as a coloured dot, never as a word. */
+/** Category name with its book glyph: circle Personal, square Business. */
 export function CategoryTag({ name, book }: { name: string; book?: Book | null }) {
-  const dot =
-    book === "BUSINESS"
-      ? "var(--book-business)"
-      : book === "PERSONAL"
-        ? "var(--book-personal)"
-        : "var(--text-muted)";
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "4px 10px",
-        borderRadius: "var(--radius-full)",
-        background: "var(--surface-card-raised)",
-        border: "1px solid var(--border-default)",
-        fontSize: "var(--text-xs)",
-        color: "var(--text-secondary)",
-        fontFamily: "var(--font-sans)",
-        maxWidth: "100%",
-      }}
-    >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          flexShrink: 0,
-          borderRadius: "var(--radius-full)",
-          background: dot,
-        }}
-      />
+    <span className="row" style={{ gap: 6, minWidth: 0, display: "inline-flex" }}>
+      {book && (
+        <span className={`bk ${book === "BUSINESS" ? "b" : "p"}`} aria-hidden="true" />
+      )}
       <span className="mb-truncate">{name}</span>
     </span>
   );
 }
 
-/** Nothing-here state: one mark, one line, one action. */
+/** Nothing-here state: says why it's empty and what happens next. */
 export function EmptyState({
   icon,
   title,
   body,
   action,
-  compactPad = false,
 }: {
-  icon?: ReactNode;
+  /** design.css icon name. */
+  icon?: string;
   title: ReactNode;
   body?: ReactNode;
   action?: ReactNode;
+  /** Kept for callers; the design has one empty-state size. */
   compactPad?: boolean;
 }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        textAlign: "center",
-        gap: "var(--space-3)",
-        padding: compactPad
-          ? "var(--space-6) var(--space-4)"
-          : "var(--space-10) var(--space-6)",
-        fontFamily: "var(--font-sans)",
-      }}
-    >
-      {icon && (
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: "var(--radius-full)",
-            background: "var(--surface-inset)",
-            border: "1px solid var(--border-default)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--text-tertiary)",
-            fontFamily: "var(--font-mono)",
-            fontSize: "var(--text-lg)",
-          }}
-        >
-          {icon}
-        </div>
-      )}
-      <div
-        style={{
-          fontSize: "var(--text-md)",
-          fontWeight: "var(--weight-semibold)",
-          color: "var(--text-primary)",
-        }}
-      >
-        {title}
-      </div>
-      {body && (
-        <p
-          style={{
-            margin: 0,
-            maxWidth: 400,
-            fontSize: "var(--text-sm)",
-            color: "var(--text-tertiary)",
-            lineHeight: "var(--leading-normal)",
-          }}
-        >
-          {body}
-        </p>
-      )}
-      {action && <div style={{ marginTop: "var(--space-2)" }}>{action}</div>}
+    <div className="empty">
+      {icon && <Icon name={icon} />}
+      <h3>{title}</h3>
+      {body && <p>{body}</p>}
+      {action}
     </div>
   );
 }
@@ -429,55 +275,104 @@ export function FormField({
   children: ReactNode;
 }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 7,
-        fontFamily: "var(--font-sans)",
-      }}
-    >
+    <div className="field">
       {label && (
-        <label
-          htmlFor={htmlFor}
-          style={{
-            fontSize: "var(--text-sm)",
-            color: "var(--text-secondary)",
-            fontWeight: "var(--weight-medium)",
-          }}
-        >
+        <label htmlFor={htmlFor}>
           {label}
-          {required && <span style={{ color: "var(--text-muted)" }}> *</span>}
+          {required && <span className="ink3"> *</span>}
         </label>
       )}
       {children}
-      {(error || hint) && (
-        <div
-          role={error ? "alert" : undefined}
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 6,
-            fontSize: "var(--text-xs)",
-            lineHeight: 1.5,
-            color: error ? "var(--status-error)" : "var(--text-muted)",
-          }}
-        >
-          {error && (
-            <span
-              style={{
-                width: 5,
-                height: 5,
-                borderRadius: "50%",
-                background: "var(--status-error)",
-                marginTop: 5,
-                flexShrink: 0,
-              }}
-            />
-          )}
-          <span>{error || hint}</span>
-        </div>
+      {error ? (
+        <span className="err-t" role="alert">
+          <Icon name="alert" size="sm" />
+          {error}
+        </span>
+      ) : (
+        hint && <span className="hint">{hint}</span>
       )}
     </div>
+  );
+}
+
+/** "Covers 20/10 – 19/11/2026": the date range every total carries. */
+export function Range({ children }: { children: ReactNode }) {
+  return <span className="range">{children}</span>;
+}
+
+/** Pay-period chip (pill) or financial-year chip (tab): the two calendars. */
+export function CalendarChip({
+  kind,
+  label,
+  children,
+  small = false,
+}: {
+  kind: "pp" | "fy" | "mo";
+  /** The short key before the range, e.g. "Pay period" or "FY". */
+  label?: ReactNode;
+  children: ReactNode;
+  small?: boolean;
+}) {
+  const icon = kind === "pp" ? "cycle" : kind === "fy" ? "fy" : "cal";
+  return (
+    <span className={`cal ${kind}${small ? " sm" : ""}`}>
+      <Icon name={icon} size="sm" />
+      {label && <span className="k">{label}</span>}
+      {children}
+    </span>
+  );
+}
+
+/** Data that isn't there. Never a $0.00 standing in for "unknown". */
+export function Missing({ children = "not entered" }: { children?: ReactNode }) {
+  return <span className="na">{children}</span>;
+}
+
+/**
+ * Who decided a transaction's category.
+ *
+ * Rules are dashed because they can be re-run. A hand decision is solid ink,
+ * like a stamp, because nothing overwrites it (`categorySource = MANUAL` is
+ * what the matcher and the daily sync both skip).
+ */
+export function Provenance({
+  source,
+  hasCategory = true,
+  short = false,
+}: {
+  source: "RULE" | "MANUAL" | "TRANSFER" | null;
+  /** A row with no category has nobody to credit, whatever the source says. */
+  hasCategory?: boolean;
+  short?: boolean;
+}) {
+  if (!hasCategory || source === null) {
+    return (
+      <span className="prov none">
+        <Icon name="warn" />
+        Nobody yet
+      </span>
+    );
+  }
+  if (source === "MANUAL") {
+    return (
+      <span className="prov hand">
+        <Icon name="pen" />
+        {short ? "By hand" : "By hand · permanent"}
+      </span>
+    );
+  }
+  if (source === "TRANSFER") {
+    return (
+      <span className="prov xfer">
+        <Icon name="swap" />
+        {short ? "Transfer" : "Confirmed transfer"}
+      </span>
+    );
+  }
+  return (
+    <span className="prov rule">
+      <Icon name="rule" />
+      Rule
+    </span>
   );
 }

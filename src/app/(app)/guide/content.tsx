@@ -39,7 +39,14 @@ const NAV_PURPOSE: Record<string, string> = {
   setup: "Budget amounts, fixed bills, payday",
   review: "Close last period, set this one",
   sync: "Is the bank feed still arriving?",
+  history: "The last six complete pay periods against budget",
+  goals: "Savings accounts against their targets",
+  ir3: "The tax return figures, both books",
+  guide: "This tour",
 };
+
+// The nav as a flat list, for the map on the getting-around step.
+const NAV_ITEMS = NAV.flatMap((group) => group.items);
 
 export function stepContent(slug: string, book: Book): StepContent {
   switch (slug) {
@@ -88,10 +95,12 @@ export function stepContent(slug: string, book: Book): StepContent {
         body: (
           <>
             <p>
-              On a desktop the menu is a sidebar on the left. On a phone it
-              becomes a tab bar along the bottom with shorter labels. Two
-              screens have no menu item and are linked from Budget instead:{" "}
-              <em>How past periods went</em> and <em>Savings goals</em>.
+              On a desktop the menu is a sidebar on the left.{" "}
+              <em>How past periods went</em>, <em>Savings goals</em> and the{" "}
+              <em>IR3 tax pack</em> sit indented under the screen they belong
+              to. On a phone it becomes a tab bar along the bottom: Budget,
+              Spending, Transfers, Reports, and <strong>More</strong> for
+              everything else.
             </p>
             <StepHeading>The header</StepHeading>
             <ul>
@@ -106,8 +115,10 @@ export function stepContent(slug: string, book: Book): StepContent {
                 above: this page stays put.
               </li>
               <li>
-                <strong>Sync</strong>{" "}(desktop only) opens Sync status. It
-                doesn&apos;t fetch anything itself.
+                <strong>The sync dot</strong>: green with the time of the last
+                sync, an amber ring when a sync is overdue, a red diamond when
+                one has failed. It opens Sync status; it doesn&apos;t fetch
+                anything itself.
               </li>
               <li>
                 <strong>Sign out</strong>, at every width. Use it on a phone
@@ -125,14 +136,10 @@ export function stepContent(slug: string, book: Book): StepContent {
                 preserve="step=getting-around"
               />
               <div className="mb-guide-navmap">
-                {NAV.map((item) => (
+                {NAV_ITEMS.map((item) => (
                   <div key={item.key} className="mb-guide-navmap-row">
                     <span style={{ color: "var(--text-primary)" }}>
                       {item.label}
-                      <span style={{ color: "var(--text-muted)" }}>
-                        {" "}
-                        · {item.short}
-                      </span>
                     </span>
                     <span style={{ color: "var(--text-tertiary)" }}>
                       {NAV_PURPOSE[item.key]}
@@ -175,7 +182,7 @@ export function stepContent(slug: string, book: Book): StepContent {
           </>
         ),
         example: (
-          <Example caption="The coloured dot is how the app shows a book: amber for Personal, blue for Business.">
+          <Example caption="The glyph is how the app shows a book: a circle for Personal, a square for Business.">
             <MockRow
               left="ANZ Everyday → ANZ Bills"
               sub={
@@ -247,7 +254,7 @@ export function stepContent(slug: string, book: Book): StepContent {
           </>
         ),
         example: (
-          <Example caption="The line is where even spending would have you today. Takeaways is well past it, so it turns amber; Groceries is behind it, which is fine.">
+          <Example caption="The marker is where even spending would have you today. Takeaways is well past it, so the part beyond is hatched; Groceries is behind it, which is fine.">
             <div className="mb-stack-sm">
               <div>
                 <div className="mb-guide-eyebrow">Safe to spend today</div>

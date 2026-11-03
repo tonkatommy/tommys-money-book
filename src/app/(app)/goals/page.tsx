@@ -1,17 +1,19 @@
 // Savings goals: every active goal against its account's balance.
 //
-// Personal book only (4c spec §1), so there is no `?book=` toggle and the
-// heading says so. Reached from a link on /budget rather than a nav item: the
-// bottom tab bar already shares its width between seven.
+// Personal book only (4c spec §1), so the header shows a locked label rather
+// than the toggle. Reached from Budget and from the sidebar, where it sits
+// under Budget.
 //
 // A goal measures its account's Akahu balance — nothing about progress is
 // stored — so each card carries its own warnings when that balance can't be
 // trusted, and a goal whose account has left the personal book stays on the
 // list saying so rather than quietly disappearing.
+//
+// Layout follows the Money Book canvas (Goals.dc.html).
 
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { ButtonLink, Card, EmptyState } from "@/components/ui/primitives";
-import { ScreenHead } from "@/components/ui/data";
+import { EmptyState, Icon } from "@/components/ui/primitives";
 import { formatNZD } from "@/lib/money";
 import { nzDate, nzToday } from "@/lib/budget/period";
 import { resolvePeriod } from "@/lib/budget/query";
@@ -29,7 +31,7 @@ export default async function GoalsPage() {
 
   return (
     <AppShell
-      active="budget"
+      active="goals"
       book="PERSONAL"
       // Goals are personal only, so the toggle would have nothing to toggle.
       lockBook
@@ -37,55 +39,68 @@ export default async function GoalsPage() {
       basePath="/goals"
       splitFortnightly={settings.splitFortnightly}
     >
-      <div className="mb-stack">
-        <ScreenHead
-          title="Savings goals"
-          sub="Personal book. Each goal tracks one savings account's balance, as the bank reports it, against a target."
-          right={
-            <ButtonLink href="/goals/new" variant="primary" size="sm">
-              New goal
-            </ButtonLink>
+      <Link href="/budget" className="row t-s semi" style={{ textDecoration: "none", minHeight: 44 }}>
+        <Icon name="back" size="sm" />
+        Budget
+      </Link>
+      <div className="page-h">
+        <div className="grow stack" style={{ gap: 6 }}>
+          <h1 className="t-xl">Savings goals</h1>
+          <span className="t-s ink2">
+            Each goal is one savings account&apos;s balance, as the bank reports it,
+            against a target. Display only: goals don&apos;t change Budget.
+          </span>
+        </div>
+        <Link className="btn primary" href="/goals/new">
+          <Icon name="plus" size="sm" />
+          New goal
+        </Link>
+      </div>
+
+      {active.length === 0 ? (
+        <EmptyState
+          icon="target"
+          title="No goals yet"
+          body="A goal points at one of your savings accounts and measures its balance against a target, with what needs to go in each pay period to hit a date."
+          action={
+            <Link className="btn primary" href="/goals/new">
+              Set a goal
+            </Link>
           }
         />
+      ) : (
+        <div className="grid cols-2" style={{ gap: 20 }}>
+          {active.map((goal) => (
+            <GoalCard key={goal.id} goal={goal} link />
+          ))}
+        </div>
+      )}
 
-        {active.length === 0 ? (
-          <Card>
-            <EmptyState
-              title="No goals yet"
-              body="A goal points at one of your savings accounts and measures its balance against a target, with what needs to go in each pay period to hit a date."
-              action={
-                <ButtonLink href="/goals/new" variant="primary" size="sm">
-                  Set a goal
-                </ButtonLink>
-              }
-            />
-          </Card>
-        ) : (
-          active.map((goal) => <GoalCard key={goal.id} goal={goal} link />)
-        )}
-
-        {archived.length > 0 && (
-          // <details> so the archived list works with JavaScript disabled.
-          <details>
-            <summary style={{ cursor: "pointer", fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-              Archived ({archived.length})
-            </summary>
-            <Card>
-              <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-                {archived.map((goal) => (
-                  <li key={goal.id} style={{ fontSize: "var(--text-sm)" }}>
-                    <a href={`/goals/${goal.id}`}>{goal.name}</a>{" "}
-                    <span style={{ color: "var(--text-muted)" }}>
-                      · {formatNZD(goal.targetCents)} in {goal.account.name} · archived{" "}
-                      {nzDate(nzToday(goal.archivedAt!))}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          </details>
-        )}
-      </div>
+      {archived.length > 0 && (
+        <section className="stack" style={{ gap: 10 }} aria-label="Archived goals">
+          <h2 className="t-m ink2">Archived · {archived.length}</h2>
+          {archived.map((goal) => (
+            <Link
+              key={goal.id}
+              className="card row"
+              href={`/goals/${goal.id}`}
+              style={{ background: "transparent", borderStyle: "dashed" }}
+            >
+              <span className="ink3">
+                <Icon name="archive" />
+              </span>
+              <span className="grow stack">
+                <span className="semi">{goal.name}</span>
+                <span className="t-xs ink3">
+                  {formatNZD(goal.targetCents)} in {goal.account.name} · archived{" "}
+                  {nzDate(nzToday(goal.archivedAt!))}
+                </span>
+              </span>
+              <Icon name="chev" size="sm" />
+            </Link>
+          ))}
+        </section>
+      )}
     </AppShell>
   );
 }

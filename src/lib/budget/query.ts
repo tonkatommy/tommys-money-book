@@ -15,7 +15,7 @@
 //     your own accounts out of the budget without a special case anywhere.
 
 import { prisma } from "@/lib/prisma";
-import type { Book, Category } from "@/generated/prisma/client";
+import type { Book, Category, CategorySource } from "@/generated/prisma/client";
 import {
   currentPayPeriod,
   daysOf,
@@ -431,6 +431,9 @@ export type CategoryDetailView = {
     description: string;
     payee: string | null;
     amountCents: number;
+    /** Who decided the category: shown as provenance on each row. */
+    categorySource: CategorySource | null;
+    account: { name: string };
   }[];
   /** Daily spend across the period, for the bar chart. */
   series: { label: string; cents: number; future: boolean }[];
@@ -458,6 +461,8 @@ export async function getCategoryDetail(
         description: true,
         payee: true,
         amountCents: true,
+        categorySource: true,
+        account: { select: { name: true } },
       },
     }),
     getCategoryHistory(category.book, categoryId, period, settings),

@@ -1,17 +1,20 @@
 "use client";
 
-// The two client islands on the setup screen.
+// The client islands on the setup screen.
 //
 // They are client components for exactly one reason: `useActionState`, which
 // gives the inline error and the pending label. Everything inside them is a
-// native input, so both forms still submit and save correctly with JavaScript
-// disabled — the island only improves the feedback, the same standard the
-// Phase 3a spec set for the transactions bulk action.
+// native input, so every form still submits and saves correctly with
+// JavaScript disabled — the island only improves the feedback, the same
+// standard the Phase 3a spec set for the transactions bulk action.
+//
+// Markup follows the canvas's SetBudget artboard: `.txl` sections of `.bl`
+// lines, an Everyday/Fixed segmented choice per line, and a sticky save bar.
 
 import { useActionState } from "react";
-import { Button, Card, CategoryTag, FormField } from "@/components/ui/primitives";
+import { Button, FormField } from "@/components/ui/primitives";
 import { AmountField, SwitchField, TextField } from "@/components/ui/form";
-import { formatNZD, formatNZDWhole } from "@/lib/money";
+import { formatNZD } from "@/lib/money";
 import type { CategoryBudgetView } from "@/lib/budget/query";
 import {
   pinDetectedBillsAction,
@@ -23,10 +26,10 @@ import {
 /**
  * Pin every detected bill at once.
  *
- * Its own `<form>` rather than a button inside the budget form above: this
- * posts nothing but the book and the period, and submitting it through the
- * other form would carry every amount field along with it and save them as a
- * side effect of pressing "pin".
+ * Its own `<form>` rather than a button inside the budget form: this posts
+ * nothing but the book and the period, and submitting it through the other
+ * form would carry every amount field along with it and save them as a side
+ * effect of pressing "pin".
  */
 export function PinBillsForm({
   book,
@@ -43,34 +46,20 @@ export function PinBillsForm({
   );
 
   return (
-    <form
-      action={formAction}
-      style={{
-        marginTop: "var(--space-4)",
-        paddingTop: "var(--space-4)",
-        borderTop: "1px solid var(--border-subtle)",
-      }}
-    >
+    <form action={formAction} className="stack" style={{ gap: 6, alignItems: "flex-end" }}>
       <input type="hidden" name="book" value={book} />
       <input type="hidden" name="periodStart" value={periodStart} />
-
-      <Button type="submit" variant="secondary" size="sm" disabled={pending}>
+      <Button type="submit" variant="primary" size="sm" disabled={pending}>
+        <span className="i i-check sm" aria-hidden="true" />
         {pending
           ? "Pinning…"
-          : `Pin ${count === 1 ? "this bill" : `all ${count} bills`}`}
+          : `Pin ${count === 1 ? "this detected bill" : `all ${count} detected bills`}`}
       </Button>
-
-      <p
-        style={{
-          margin: "10px 0 0",
-          fontSize: "var(--text-xs)",
-          color: state?.error ? "var(--status-error)" : "var(--text-muted)",
-          lineHeight: 1.6,
-        }}
-      >
-        {state?.error ??
-          "Each one is budgeted at the amount it usually costs, and its due day is filled in. Change any of it above afterwards."}
-      </p>
+      {state?.error && (
+        <span className="err-t" role="alert">
+          {state.error}
+        </span>
+      )}
     </form>
   );
 }
@@ -81,189 +70,163 @@ export function BudgetForm({
   flexible,
   fixed,
   seedFromAverages,
+  discardHref,
 }: {
   book: string;
   periodStart: string;
   flexible: CategoryBudgetView[];
   fixed: CategoryBudgetView[];
   seedFromAverages: boolean;
+  /** This screen without the seed: reloading it drops unsaved edits. */
+  discardHref: string;
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     saveBudgetAction,
     undefined,
   );
 
+  const total = (list: CategoryBudgetView[]) =>
+    list.reduce(
+      (sum, c) => sum + (seedFromAverages ? c.averageCents : c.standingCents),
+      0,
+    );
+
   return (
-    <form action={formAction}>
+    <form action={formAction} className="stack" style={{ gap: 20 }}>
       <input type="hidden" name="book" value={book} />
       <input type="hidden" name="periodStart" value={periodStart} />
 
-      <Card
-        title="Everyday categories"
-        padded={false}
-        action={
-          <Button type="submit" variant="primary" size="sm" disabled={pending}>
+      {state?.error && (
+        <FormField error={state.error}>
+          <span />
+        </FormField>
+      )}
+
+      {fixed.length > 0 && (
+        <section className="txl" aria-label="Fixed bills">
+          <div className="grp-h">
+            <span className="sect-t">
+              <span className="badge b-fixed">Fixed</span>
+              Fixed bills · {fixed.length}
+            </span>
+            <span className="num t-s">{formatNZD(total(fixed))}</span>
+          </div>
+          <LineHeader />
+          {fixed.map((category) => (
+            <BudgetLine key={category.categoryId} category={category} seed={seedFromAverages} />
+          ))}
+        </section>
+      )}
+
+      <section className="txl" aria-label="Everyday categories">
+        <div className="grp-h">
+          <span className="sect-t">Everyday · {flexible.length}</span>
+          <span className="num t-s">{formatNZD(total(flexible))}</span>
+        </div>
+        <LineHeader />
+        {flexible.map((category) => (
+          <BudgetLine key={category.categoryId} category={category} seed={seedFromAverages} />
+        ))}
+        {flexible.length === 0 && fixed.length === 0 && (
+          <p className="t-s ink2" style={{ padding: "14px 20px" }}>
+            No expense categories have any history in this book yet. Once
+            transactions sync and categorise, they appear here.
+          </p>
+        )}
+      </section>
+
+      <div className="savebar">
+        <span className="t-s ink2">
+          {seedFromAverages
+            ? "Filled in from your averages. Nothing is saved until you press Save."
+            : "Every line is saved together, from this pay period onwards."}
+        </span>
+        <span className="row">
+          <a className="btn quiet" href={discardHref}>
+            Discard
+          </a>
+          <Button type="submit" variant="primary" disabled={pending}>
             {pending ? "Saving…" : "Save budget"}
           </Button>
-        }
-      >
-        <div className="mb-rows">
-          {state?.error && (
-            <div style={{ paddingBottom: "var(--space-4)" }}>
-              <FormField error={state.error}>
-                <span />
-              </FormField>
-            </div>
-          )}
-
-          {flexible.map((category) => (
-            <CategoryRow
-              key={category.categoryId}
-              category={category}
-              seedFromAverages={seedFromAverages}
-            />
-          ))}
-
-          {fixed.length > 0 && (
-            <div
-              style={{
-                paddingTop: "var(--space-5)",
-                marginTop: "var(--space-3)",
-                borderTop: "1px solid var(--border-default)",
-                fontSize: "var(--text-xs)",
-                color: "var(--text-muted)",
-                letterSpacing: "var(--tracking-wide)",
-                textTransform: "uppercase",
-              }}
-            >
-              Fixed bills
-            </div>
-          )}
-
-          {fixed.map((category) => (
-            <CategoryRow
-              key={category.categoryId}
-              category={category}
-              seedFromAverages={seedFromAverages}
-            />
-          ))}
-
-          {flexible.length === 0 && fixed.length === 0 && (
-            <p
-              style={{
-                fontSize: "var(--text-sm)",
-                color: "var(--text-muted)",
-                paddingTop: "var(--space-4)",
-              }}
-            >
-              No expense categories have any history in this book yet. Once
-              transactions sync and categorise, they will appear here.
-            </p>
-          )}
-        </div>
-      </Card>
+        </span>
+      </div>
     </form>
   );
 }
 
-function CategoryRow({
+function LineHeader() {
+  return (
+    <div className="blh">
+      <span>Category</span>
+      <span>Type</span>
+      <span>Due day</span>
+      <span>Amount</span>
+    </div>
+  );
+}
+
+function BudgetLine({
   category,
-  seedFromAverages,
+  seed,
 }: {
   category: CategoryBudgetView;
-  seedFromAverages: boolean;
+  seed: boolean;
 }) {
-  const valueCents = seedFromAverages
-    ? category.averageCents
-    : category.standingCents;
-  const differenceCents = valueCents - category.averageCents;
-  const sameAsUsual = Math.abs(differenceCents) < 100;
+  const valueCents = seed ? category.averageCents : category.standingCents;
+  const id = category.categoryId;
 
   return (
-    <div className="mb-row mb-setup-row">
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-        <CategoryTag name={category.name} book={category.book} />
-        <span
-          style={{
-            fontSize: "var(--text-xs)",
-            color: "var(--text-muted)",
-            paddingLeft: 2,
-          }}
-        >
-          3-period average{" "}
-          <span className="mb-num">{formatNZD(category.averageCents)}</span>
+    <div className="bl">
+      <span className="bl-n">
+        <span className="semi">{category.name}</span>
+        <span className="range">
+          {category.unbudgeted && !seed ? "No budget yet · " : ""}3-period avg{" "}
+          {formatNZD(category.averageCents)}
         </span>
-      </div>
+      </span>
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <span
-          className="mb-num"
-          style={{
-            fontSize: "var(--text-xs)",
-            color: sameAsUsual
-              ? "var(--text-muted)"
-              : differenceCents > 0
-                ? "var(--text-tertiary)"
-                : "var(--status-warning)",
-            minWidth: 96,
-            textAlign: "right",
-          }}
-        >
-          {sameAsUsual
-            ? "= usual"
-            : `${differenceCents > 0 ? "+" : "−"}${formatNZDWhole(
-                Math.abs(differenceCents),
-              )} vs usual`}
+      {/* Two radios rather than a checkbox, so the choice reads as a choice.
+          The action only looks for "on", so "off" is the same as unticked. */}
+      <span className="bl-t">
+        <span className="radio-seg" role="radiogroup" aria-label={`${category.name} type`}>
+          <label>
+            <input type="radio" name={`fixed:${id}`} value="off" defaultChecked={!category.isFixed} />
+            Everyday
+          </label>
+          <label>
+            <input type="radio" name={`fixed:${id}`} value="on" defaultChecked={category.isFixed} />
+            Fixed
+          </label>
         </span>
+      </span>
 
+      <span className="bl-d">
+        <label className="vh" htmlFor={`due:${id}`}>
+          {category.name} due day
+        </label>
+        <TextField
+          id={`due:${id}`}
+          name={`due:${id}`}
+          defaultValue={category.dueDay ? String(category.dueDay) : ""}
+          placeholder="Fixed only · day"
+        />
+      </span>
+
+      <span className="bl-a">
         <AmountField
-          name={`amount:${category.categoryId}`}
+          name={`amount:${id}`}
           valueCents={valueCents}
           ariaLabel={`${category.name} budget`}
+          width={86}
         />
-
         {/* Carries the "amount varies" flag through a save. There is no
             control for it — the detector decides whether a bill's amount moves
             — but the whole form posts every category on every Save, so without
             this the action would read the field as absent and clear a flag
             nobody touched. Rendered only when set, which is exactly what an
             unchecked checkbox would post. */}
-        {category.estimated && (
-          <input
-            type="hidden"
-            name={`estimated:${category.categoryId}`}
-            value="on"
-          />
-        )}
-
-        <label
-          className="mb-switch"
-          title="A bill with a due date. Held out of the pace calculation."
-        >
-          <input
-            type="checkbox"
-            name={`fixed:${category.categoryId}`}
-            defaultChecked={category.isFixed}
-          />
-          <span className="mb-switch-track" aria-hidden="true" />
-          <span className="mb-switch-label">bill</span>
-        </label>
-
-        <span style={{ width: 62 }}>
-          <TextField
-            name={`due:${category.categoryId}`}
-            defaultValue={category.dueDay ? String(category.dueDay) : ""}
-            placeholder="day"
-          />
-        </span>
-      </div>
+        {category.estimated && <input type="hidden" name={`estimated:${id}`} value="on" />}
+      </span>
     </div>
   );
 }
@@ -285,65 +248,31 @@ export function PayCycleForm({
   );
 
   return (
-    <Card title="Pay cycle">
-      <form
-        action={formAction}
-        style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}
-      >
+    <section className="card pad-l" aria-label="Pay cycle">
+      <form action={formAction} className="stack" style={{ gap: 16 }}>
+        <h2 className="t-m">Pay cycle</h2>
         <FormField
-          label="Payday"
+          label="Payday · day of month"
           htmlFor="anchorDay"
           hint={`The period runs ${periodLabel}. A month too short for that day falls back to its last day.`}
           error={state?.error}
         >
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 72 }}>
-              <TextField
-                id="anchorDay"
-                name="anchorDay"
-                defaultValue={String(anchorDay)}
-              />
-            </span>
-            <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-              of the month
-            </span>
-          </span>
+          <TextField id="anchorDay" name="anchorDay" defaultValue={String(anchorDay)} />
         </FormField>
 
-        <div
-          style={{
-            paddingTop: "var(--space-4)",
-            borderTop: "1px solid var(--border-subtle)",
-          }}
-        >
-          <SwitchField
-            name="splitFortnightly"
-            label="Show half a period at a time"
-            defaultChecked={splitFortnightly}
-          />
-          <p
-            style={{
-              margin: "10px 0 0",
-              fontSize: "var(--text-xs)",
-              color: "var(--text-muted)",
-              lineHeight: 1.6,
-            }}
-          >
-            {splitFortnightly ? (
-              <>
-                Your pay stays monthly. Safe-to-spend shows one fortnight at a
-                time — around{" "}
-                <span className="mb-num">
-                  {formatNZDWhole(Math.round(flexBudgetCents / 2))}
-                </span>{" "}
-                of everyday spending — so a month&rsquo;s money never looks
-                available on the 21st.
-              </>
-            ) : (
-              "A monthly lump is hard to pace. This splits the same budget in two so you only ever see half of it at once."
-            )}
-          </p>
-        </div>
+        <SwitchField
+          name="splitFortnightly"
+          label="Show half a period at a time"
+          defaultChecked={splitFortnightly}
+        />
+        <p className="hint" style={{ marginTop: -10 }}>
+          Display only: your pay stays monthly and no saved budget changes.{" "}
+          {splitFortnightly
+            ? `Safe to spend shows one fortnight at a time, around ${formatNZD(
+                Math.round(flexBudgetCents / 2),
+              )} of everyday spending.`
+            : "Halves what Safe to spend shows, so a month's money never looks available on the 21st."}
+        </p>
 
         <div>
           <Button type="submit" variant="secondary" size="sm" disabled={pending}>
@@ -351,6 +280,6 @@ export function PayCycleForm({
           </Button>
         </div>
       </form>
-    </Card>
+    </section>
   );
 }

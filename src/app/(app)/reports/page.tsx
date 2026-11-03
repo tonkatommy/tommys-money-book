@@ -8,21 +8,23 @@
 // The consequence is the one risk this screen has to manage: August on the
 // budget screen and August in a report are not the same August. So every
 // figure below is printed with its literal date range beside it, in
-// DD/MM/YYYY, and the app-shell header keeps calling its own dates "Pay
-// period" so the two are never read as the same thing.
+// DD/MM/YYYY, the FY is drawn as a different shape of chip from the pay
+// period, and the GST window gets a third.
 //
 // A pure server component. No mutations, so no Server Actions and no forms —
 // the book toggle and the year selector are links, as everywhere else.
+// Layout follows the Money Book canvas (Reports.dc.html).
 
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { Badge, Card } from "@/components/ui/primitives";
-import { Figure, KV, PaceBar, ScreenHead } from "@/components/ui/data";
+import { Icon } from "@/components/ui/primitives";
+import { withBook } from "@/components/ui/nav";
 import { formatNZD, formatNZDWhole } from "@/lib/money";
 import { nzDate } from "@/lib/budget/period";
 import { parseBook, resolvePeriod } from "@/lib/budget/query";
 import { parseFY, selectableFYs } from "@/lib/reports/fy";
 import { getReportsOverview } from "@/lib/reports/query";
-import { FyLinks, QualityAlerts, ReportLinks } from "./parts";
+import { FyChip, FyLinks, QualityAlerts, fyShort } from "./parts";
 
 export const dynamic = "force-dynamic";
 
@@ -45,16 +47,15 @@ export default async function ReportsPage({
   const fy = parseFY(params.fy, now);
 
   // The shell's header is the pay period, which this screen does not use. It
-  // is loaded anyway because the chrome is shared and the header labels it
-  // "Pay period" — deliberately, so the two regimes stay visibly separate.
-  //
-  // It takes this render's instant rather than reading the clock for itself:
-  // it awaits the database first, so its own `new Date()` would land a query
+  // takes this render's instant rather than reading the clock for itself: it
+  // awaits the database first, so its own `new Date()` would land a query
   // later than the one the figures were cut at.
   const { period, settings } = await resolvePeriod(undefined, now);
   const view = await getReportsOverview(book, fy, now);
 
   const years = selectableFYs(now);
+  const bookName = book === "BUSINESS" ? "Business · Tommy Tinkers" : "Personal book";
+  const link = (path: string) => withBook(`${path}?fy=${fy.year}`, book);
 
   return (
     <AppShell
@@ -65,155 +66,158 @@ export default async function ReportsPage({
       preserveQuery={params.fy ? `fy=${fy.year}` : undefined}
       splitFortnightly={settings.splitFortnightly}
     >
-      <div className="mb-stack">
-        <ScreenHead
-          title="Reports"
-          sub={
-            <>
-              The tax year, not the pay period. These figures cover{" "}
-              <strong>{view.rangeLabel}</strong> and will not match the budget
-              screens, which run 20th to 19th.
-            </>
-          }
-          right={
-            <FyLinks
-              years={years}
-              current={fy}
-              book={book}
-              basePath="/reports"
-            />
-          }
-        />
+      <QualityAlerts quality={view.quality} book={book} fy={fy} rangeEnd={view.rangeEnd} />
 
-        <ReportLinks book={book} fy={fy} active="index" />
+      <div className="page-h">
+        <div className="grow stack" style={{ gap: 6 }}>
+          <h1 className="t-xl">Reports</h1>
+          <span className="t-s ink2">
+            {bookName} · reports run on the NZ financial year, not pay periods, so
+            they won&apos;t match the Budget screens.
+          </span>
+        </div>
+        <FyLinks years={years} current={fy} book={book} basePath="/reports" />
+      </div>
+      <FyChip fy={fy} rangeEnd={view.rangeEnd} />
 
-        <QualityAlerts
-          quality={view.quality}
-          book={book}
-          fy={fy}
-          rangeEnd={view.rangeEnd}
-        />
-
-        <Card
-          title={`${fy.label} so far`}
-          action={
-            <span
-              className="mb-num"
-              style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
-            >
-              {view.rangeLabel}
-            </span>
-          }
+      <div className="grid cols-3" style={{ gap: 16 }}>
+        <div className="card pad-l stack" style={{ gap: 6 }}>
+          <span className="dirl in">
+            <Icon name="in" size="sm" />
+            Money in
+          </span>
+          <span className="m in big">+{formatNZD(view.incomeCents)}</span>
+          <span className="t-xs ink3">
+            Income categories only. Transfers between your own accounts aren&apos;t income.
+          </span>
+        </div>
+        <div className="card pad-l stack" style={{ gap: 6 }}>
+          <span className="dirl out">
+            <Icon name="out" size="sm" />
+            Money out
+          </span>
+          <span className="m big">{formatNZD(view.expensesCents)}</span>
+          <span className="t-xs ink3">Expense categories only.</span>
+        </div>
+        <div
+          className="card pad-l stack"
+          style={{ gap: 6, borderColor: "var(--ink)", borderWidth: 2 }}
         >
-          <div className="mb-grid-tight">
-            <Figure
-              label="Money in"
-              value={formatNZD(view.incomeCents)}
-              tone="var(--money-in)"
-              note="income categories only — transfers between your own accounts are not income"
-            />
-            <Figure
-              label="Money out"
-              value={formatNZD(view.expensesCents)}
-              tone="var(--money-out)"
-              note="expense categories only"
-            />
-          </div>
+          <span className="dirl net">
+            <Icon name="net" size="sm" />
+            Net
+          </span>
+          <span className="m big" style={{ fontWeight: 800, color: view.netCents < 0 ? "var(--bad)" : undefined }}>
+            {view.netCents >= 0 ? "+" : "−"}
+            {formatNZD(Math.abs(view.netCents))}
+          </span>
+          <span className="t-xs ink3">Money in minus money out · {view.rangeLabel}</span>
+        </div>
+      </div>
 
-          <div
-            style={{
-              marginTop: "var(--space-5)",
-              paddingTop: "var(--space-4)",
-              borderTop: "1px solid var(--border-subtle)",
-            }}
-          >
-            <KV
-              label={`Net for ${fy.label}`}
-              value={formatNZD(view.netCents)}
-              tone={
-                view.netCents >= 0 ? "var(--money-in)" : "var(--status-error)"
-              }
-            />
-          </div>
-        </Card>
+      <div className="grid cols-main" style={{ gap: 20, alignItems: "start" }}>
+        <section className="stack" style={{ gap: 12 }} aria-label="Reports">
+          <h2 className="t-m">Reports for this year</h2>
+          <Link className="card row" href={link("/reports/categories")} style={{ gap: 14 }}>
+            <Icon name="chart" size="lg" />
+            <span className="grow stack">
+              <span className="semi">By category</span>
+              <span className="t-s ink2">Income and spending ranked, with each one&apos;s share</span>
+            </span>
+            <Icon name="chev" />
+          </Link>
+          <Link className="card row" href={link("/reports/months")} style={{ gap: 14 }}>
+            <Icon name="cal" size="lg" />
+            <span className="grow stack">
+              <span className="semi">Month by month</span>
+              <span className="t-s ink2">12 calendar months of in, out and net</span>
+            </span>
+            <Icon name="chev" />
+          </Link>
+          <Link className="card row" href={link("/reports/ir3")} style={{ gap: 14 }}>
+            <Icon name="doc" size="lg" />
+            <span className="grow stack">
+              <span className="semi">IR3 tax pack · FY {fyShort(fy)}</span>
+              <span className="t-s ink2">Both books, ready for your accountant</span>
+            </span>
+            <Icon name="chev" />
+          </Link>
+        </section>
 
         {/* Business only. A rolling turnover figure against a registration
             threshold says nothing about the personal book, and a zero there
             would only invite the question of why it is zero. */}
-        {view.gst && (
-          <Card
-            title="GST registration monitor"
-            action={
-              <Badge tone={view.gst.fraction >= 0.75 ? "warning" : "ok"}>
-                {Math.round(view.gst.fraction * 100)}% of threshold
-              </Badge>
-            }
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                gap: 10,
-                flexWrap: "wrap",
-                marginBottom: "var(--space-4)",
-              }}
-            >
-              <span className="mb-figure-md mb-num">
+        {view.gst ? (
+          <section className="card pad-l stack" style={{ gap: 14 }} aria-label="GST registration monitor">
+            <div className="row between wrap">
+              <h2 className="t-m">GST registration monitor</h2>
+              <span className="badge b-owner">
+                <span className="bk b" aria-hidden="true" />
+                Business
+              </span>
+            </div>
+            <span className="cal mo sm" style={{ alignSelf: "flex-start" }}>
+              <Icon name="cal" size="sm" />
+              Rolling 12 months · {nzDate(view.gst.from)} – {nzDate(view.gst.to)}
+            </span>
+            <div className="stack" style={{ gap: 4 }}>
+              <span className="m" style={{ fontSize: 28 }}>
                 {formatNZD(view.gst.netCents)}
               </span>
-              <span
-                style={{
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-tertiary)",
-                }}
-              >
-                of {formatNZDWhole(view.gst.thresholdCents)}
+              <span className="t-s ink2">
+                Tommy Tinkers sales, of the{" "}
+                <span className="num">{formatNZDWhole(view.gst.thresholdCents)}</span>{" "}
+                threshold · {view.gst.transactions} sales counted
               </span>
             </div>
-
-            <PaceBar
-              spentCents={view.gst.netCents}
-              budgetCents={view.gst.thresholdCents}
-              tone={view.gst.fraction >= 0.75 ? "warning" : "accent"}
-            />
-
             <div
-              style={{
-                marginTop: "var(--space-4)",
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-2)",
-              }}
+              className="meter"
+              role="meter"
+              aria-valuemin={0}
+              aria-valuemax={view.gst.thresholdCents / 100}
+              aria-valuenow={view.gst.netCents / 100}
+              aria-label="Sales against GST threshold"
             >
-              <KV
-                label="12 months to"
-                value={nzDate(view.gst.to)}
-                mono={false}
+              <div
+                className="fill"
+                style={{ width: `${Math.min(100, Math.max(0, view.gst.fraction * 100))}%` }}
               />
-              <KV
-                label="Window opens"
-                value={nzDate(view.gst.from)}
-                mono={false}
-              />
-              <KV
-                label="Sales counted"
-                value={`${view.gst.transactions}`}
-              />
+              <div className="tick" style={{ left: "75%" }} />
             </div>
-
-            <p
-              style={{
-                margin: "var(--space-4) 0 0",
-                fontSize: "var(--text-xs)",
-                color: "var(--text-tertiary)",
-              }}
-            >
-              Registration is triggered by turnover in the <em>past</em> twelve
-              months, so this window moves every day and is not the financial
-              year above. Business income only — money you put into the
-              business yourself is an owner contribution and is not turnover.
+            <div className="row between range">
+              <span>$0</span>
+              <span>Tick = 75%</span>
+              <span>{formatNZDWhole(view.gst.thresholdCents)}</span>
+            </div>
+            <p className="t-s">
+              <span className="semi">
+                {(view.gst.fraction * 100).toFixed(1)}% ·{" "}
+                <span className="num">
+                  {formatNZD(Math.max(0, view.gst.thresholdCents - view.gst.netCents))}
+                </span>{" "}
+                to go.
+              </span>{" "}
+              {view.gst.fraction >= 0.75 && (
+                <span style={{ color: "var(--warn)" }}>
+                  Past 75%: worth a word with your accountant.
+                </span>
+              )}
             </p>
-          </Card>
+            <p className="t-xs ink3">
+              This window rolls daily and ignores the financial year, because
+              that&apos;s how the threshold works. Business income only: money you
+              put in yourself is owner money, not turnover.
+            </p>
+          </section>
+        ) : (
+          <section className="card pad-l stack" style={{ gap: 8 }} aria-label="GST">
+            <h2 className="t-m">GST registration monitor</h2>
+            <p className="t-s ink2">
+              GST is about business turnover, so the monitor lives on the Business
+              book.{" "}
+              <Link href={withBook(`/reports?fy=${fy.year}`, "BUSINESS")}>Switch to Business</Link>
+            </p>
+          </section>
         )}
       </div>
     </AppShell>

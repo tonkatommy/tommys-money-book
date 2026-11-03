@@ -10,7 +10,7 @@
 // inside is native, so all three still submit with JavaScript disabled.
 
 import { useActionState } from "react";
-import { Button, Card, FormField } from "@/components/ui/primitives";
+import { Button, FormField, Icon, Provenance } from "@/components/ui/primitives";
 import { TextField } from "@/components/ui/form";
 import {
   setCategoryAction,
@@ -23,10 +23,15 @@ export function CategoryForm({
   id,
   categoryId,
   categories,
+  bookName,
+  source,
 }: {
   id: string;
   categoryId: string | null;
   categories: { id: string; name: string; kind: string }[];
+  /** "Personal" or "Business": the only book whose categories are offered. */
+  bookName: string;
+  source: "RULE" | "MANUAL" | "TRANSFER" | null;
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     setCategoryAction,
@@ -34,18 +39,14 @@ export function CategoryForm({
   );
 
   return (
-    <Card title="Category">
-      <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+    <section className="card pad-l" aria-label="Category">
+      <form action={formAction} className="stack" style={{ gap: 14 }}>
         <input type="hidden" name="id" value={id} />
+        <h2 className="t-m">Category</h2>
 
-        <FormField
-          label="Category"
-          htmlFor="categoryId"
-          hint="Saving here marks the row as decided by hand, so the rule matcher will never overwrite it."
-          error={state?.error}
-        >
+        <FormField label={`${bookName} category`} htmlFor="categoryId" error={state?.error}>
           <select
-            className="mb-input"
+            className="inp"
             id="categoryId"
             name="categoryId"
             defaultValue={categoryId ?? ""}
@@ -60,13 +61,27 @@ export function CategoryForm({
           </select>
         </FormField>
 
+        <div className="row wrap">
+          <span className="t-s ink2">Right now:</span>
+          <Provenance source={source} hasCategory={categoryId !== null} />
+        </div>
+        <div className="banner info" style={{ padding: "12px 14px" }}>
+          <Icon name="pen" />
+          <div>
+            <p className="bb" style={{ color: "var(--ink)" }}>
+              Saving marks this <span className="semi">decided by hand</span>. Hand
+              decisions are permanent: no rule or sync will ever change it back.
+            </p>
+          </div>
+        </div>
+
         <div>
-          <Button type="submit" variant="primary" size="sm" disabled={pending}>
+          <Button type="submit" variant="primary" disabled={pending}>
             {pending ? "Saving…" : "Save category"}
           </Button>
         </div>
       </form>
-    </Card>
+    </section>
   );
 }
 
@@ -77,22 +92,23 @@ export function NotesForm({ id, notes }: { id: string; notes: string | null }) {
   );
 
   return (
-    <Card title="Notes">
-      <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+    <section className="card pad-l" aria-label="Notes">
+      <form action={formAction} className="stack" style={{ gap: 10 }}>
         <input type="hidden" name="id" value={id} />
 
         <FormField
+          label="Notes"
           htmlFor="notes"
           hint="For the things the bank's description doesn't say — which job it was for, who to split it with."
           error={state?.error}
         >
           <textarea
-            className="mb-input"
+            className="inp"
             id="notes"
             name="notes"
             rows={3}
             defaultValue={notes ?? ""}
-            style={{ resize: "vertical", fontFamily: "var(--font-sans)" }}
+            style={{ minHeight: 96, padding: "12px 14px", resize: "vertical" }}
           />
         </FormField>
 
@@ -102,7 +118,7 @@ export function NotesForm({ id, notes }: { id: string; notes: string | null }) {
           </Button>
         </div>
       </form>
-    </Card>
+    </section>
   );
 }
 
@@ -141,19 +157,24 @@ export function ManualFieldsForm({
   const seed = (field: string, fallback: string): string => was[field] ?? fallback;
 
   return (
-    <Card title="Entry">
+    <section className="card pad-l" aria-label="What you entered">
       <form
         key={state?.attempt ?? 0}
         action={formAction}
-        style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}
+        className="stack"
+        style={{ gap: 14 }}
       >
+        <div className="row between">
+          <h2 className="t-m">What you entered</h2>
+          <span className="badge b-cash">Editable</span>
+        </div>
         <input type="hidden" name="id" value={id} />
         {/* Notes are edited by their own form; carried here so a save of these
             fields doesn't blank them. */}
         <input type="hidden" name="notes" value={notes ?? ""} />
 
         <FormField label="Date" htmlFor="date">
-          <input className="mb-input" id="date" type="date" name="date" defaultValue={seed("date", date)} />
+          <input className="inp" id="date" type="date" name="date" defaultValue={seed("date", date)} />
         </FormField>
 
         <FormField label="Description" htmlFor="description" required>
@@ -165,16 +186,19 @@ export function ManualFieldsForm({
         </FormField>
 
         <FormField label="Amount" htmlFor="amount" error={state?.error}>
-          <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" }}>
-            <span style={{ flex: "1 1 140px" }}>
-              <TextField
+          <div className="row wrap" style={{ gap: 12 }}>
+            <span className="money-inp" style={{ flex: "1 1 140px" }}>
+              <span className="cur" aria-hidden="true">$</span>
+              <input
+                className="inp"
                 id="amount"
                 name="amount"
+                inputMode="decimal"
                 defaultValue={seed("amount", (Math.abs(amountCents) / 100).toFixed(2))}
               />
             </span>
             <select
-              className="mb-input"
+              className="inp"
               name="direction"
               defaultValue={seed("direction", amountCents > 0 ? "in" : "out")}
               aria-label="Money in or out"
@@ -187,11 +211,11 @@ export function ManualFieldsForm({
         </FormField>
 
         <div>
-          <Button type="submit" variant="primary" size="sm" disabled={pending}>
+          <Button type="submit" variant="primary" disabled={pending}>
             {pending ? "Saving…" : "Save entry"}
           </Button>
         </div>
       </form>
-    </Card>
+    </section>
   );
 }

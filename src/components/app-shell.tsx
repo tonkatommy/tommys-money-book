@@ -6,19 +6,25 @@
 // instead of client state. A layout would have to read the book from a cookie
 // or a client hook, and both are worse than passing it down explicitly.
 //
-// One layout for every width. The prototype had a Desktop/Phone switch that
-// swapped a React context; this has media queries (globals.css) and the
-// switch is gone — the sidebar and the tab bar are the same nav rendered
-// twice, each hidden at the other's breakpoint.
+// One layout for every width: the sidebar and the tab bar are the same nav
+// rendered twice, each hidden by design.css at the other's breakpoint.
+// Markup and classes follow the Money Book canvas (Budget.dc.html).
 
 import type { ReactNode } from "react";
 import type { Book } from "@/generated/prisma/client";
 import { BottomNav, BookToggle, SideNav } from "@/components/ui/nav";
-import { Badge, ButtonLink } from "@/components/ui/primitives";
 import { logout } from "@/app/login/actions";
 import type { PayPeriod } from "@/lib/budget/period";
+import { getShellStatus } from "@/lib/shell";
 
-export function AppShell({
+const time = new Intl.DateTimeFormat("en-NZ", {
+  timeZone: "Pacific/Auckland",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+export async function AppShell({
   active,
   book,
   period,
@@ -43,123 +49,113 @@ export function AppShell({
   preserveQuery?: string;
   splitFortnightly?: boolean;
   /**
-   * This screen's book is a property of the record it shows, not a choice.
+   * This screen's book is fixed, not a choice.
    *
-   * A category drilldown is reached by id, and that id already determines the
-   * book — so the toggle has nothing to toggle. Rendering it anyway leaves a
-   * control that looks live and does nothing when pressed, which is worse than
-   * not offering it.
+   * `true`: the book is a property of the record shown (a category reached by
+   * id) or of the feature (goals are personal only), so the toggle would look
+   * live and do nothing. `"both"`: the screen spans both books (the IR3
+   * pack). Either way a dashed, locked label replaces the toggle.
    */
-  lockBook?: boolean;
+  lockBook?: boolean | "both";
   children: ReactNode;
 }) {
+  const status = await getShellStatus(book, period);
+
   return (
-    <div className="mb-shell">
-      <div className="mb-sidebar">
-        <SideNav active={active} book={book} />
-      </div>
+    <div className="app">
+      <SideNav active={active} book={book} uncategorised={status.uncategorised} />
 
-      <div className="mb-main">
-        <header className="mb-header">
-          <div className="mb-header-period">
-            <div
-              style={{
-                fontSize: "var(--text-xs)",
-                color: "var(--text-muted)",
-                letterSpacing: "var(--tracking-wide)",
-                textTransform: "uppercase",
-              }}
-            >
-              Pay period
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                gap: 10,
-                marginTop: 3,
-                flexWrap: "wrap",
-              }}
-            >
-              <span
-                className="mb-num"
-                style={{
-                  fontSize: "var(--text-md)",
-                  fontWeight: "var(--weight-semibold)",
-                }}
-              >
-                {period.label}
-              </span>
-              <span
-                style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}
-              >
-                {period.daysLeft === 0
-                  ? "payday tomorrow"
-                  : `${period.daysLeft} days to payday`}
-                {splitFortnightly ? " · fortnightly" : ""}
-              </span>
-            </div>
-          </div>
+      <div className="main">
+        <header className="top">
+          <span className="cal pp">
+            <span className="i i-cycle sm" aria-hidden="true" />
+            {period.label} ·{" "}
+            <b>
+              {period.daysLeft === 0
+                ? "payday tomorrow"
+                : `${period.daysLeft} days to payday`}
+            </b>
+            {splitFortnightly ? " · half view" : ""}
+          </span>
+          <span className="grow" />
 
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            {lockBook ? (
-              <Badge tone="neutral">
-                {book === "BUSINESS" ? "Business" : "Personal"} book
-              </Badge>
-            ) : (
-              <BookToggle
-                value={book}
-                basePath={basePath}
-                preserve={preserveQuery}
-              />
-            )}
+          <SyncIndicator status={status} />
 
-            {/* Wide only: the bottom tab bar already carries Sync below 768px,
-                so this would be a second route to the same screen.
-                A link, not an action — a full Akahu sync takes long enough that
-                holding a request open for it is a worse trade than a click. */}
-            <span className="mb-wide-flex">
-              <ButtonLink href="/sync" variant="primary" size="sm">
-                Sync
-              </ButtonLink>
+          {/* Every width. The tab bar has no sign out, so hiding it on a phone
+              would leave no way to end a session on the device most likely
+              to be lost. */}
+          <form action={logout}>
+            <button type="submit" className="btn sm ghost signout">
+              <span className="i i-out-door sm" aria-hidden="true" />
+              <span className="dt-only">Sign out</span>
+              <span className="ph-only vh">Sign out</span>
+            </button>
+          </form>
+
+          {lockBook ? (
+            <span className="book-fixed">
+              {lockBook === "both" ? (
+                <>
+                  <span className="bk p" aria-hidden="true" />
+                  <span className="bk b" aria-hidden="true" />
+                  Both books
+                </>
+              ) : (
+                <>
+                  <span
+                    className={`bk ${book === "BUSINESS" ? "b" : "p"}`}
+                    aria-hidden="true"
+                  />
+                  {book === "BUSINESS" ? "Business" : "Personal"} book
+                </>
+              )}
+              <span className="i i-lock sm lk" aria-hidden="true" />
             </span>
-
-            {/* Every width. Sign out has no equivalent in the tab bar, so
-                hiding it on a phone would leave no way to end a session on the
-                device most likely to be lost. */}
-            <form action={logout}>
-              <button
-                className="mb-btn"
-                type="submit"
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: "6px 12px",
-                  borderRadius: "var(--radius-md)",
-                  color: "var(--text-secondary)",
-                  fontFamily: "var(--font-sans)",
-                  fontSize: "var(--text-xs)",
-                  fontWeight: "var(--weight-semibold)",
-                }}
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
+          ) : (
+            <BookToggle value={book} basePath={basePath} preserve={preserveQuery} />
+          )}
         </header>
 
-        <main className="mb-body">{children}</main>
-      </div>
+        <main className="content">{children}</main>
 
-      <BottomNav active={active} book={book} />
+        <BottomNav active={active} book={book} uncategorised={status.uncategorised} />
+      </div>
     </div>
+  );
+}
+
+/**
+ * Green dot, amber ring or red diamond: shape differs as well as colour, so
+ * a stopped feed is visible without relying on hue. A link, not an action —
+ * a full Akahu sync takes long enough that holding a request open for it is
+ * a worse trade than a click through to the status page.
+ */
+function SyncIndicator({
+  status,
+}: {
+  status: Awaited<ReturnType<typeof getShellStatus>>;
+}) {
+  if (status.health === "failing") {
+    return (
+      <a className="syncind bad" href="/sync">
+        <span className="dot bad" aria-hidden="true" />
+        Sync failing
+      </a>
+    );
+  }
+  if (status.health === "overdue") {
+    return (
+      <a className="syncind warn" href="/sync">
+        <span className="dot warn" aria-hidden="true" />
+        Sync overdue
+      </a>
+    );
+  }
+  return (
+    <a className="syncind" href="/sync">
+      <span className="dot" aria-hidden="true" />
+      <span className="dt-only">Synced&nbsp;</span>
+      {status.lastSuccess ? time.format(status.lastSuccess) : ""}
+    </a>
   );
 }
